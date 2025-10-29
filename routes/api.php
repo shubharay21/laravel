@@ -38,34 +38,40 @@ Route::post('/cmosvc/user/login', function () {
         ],
         "Exception" => false,
         "Errors" => null,
-        "Token" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxNDIwNiwidXNlcl90eXBlIjoxLCJwb3NpdGlvbl9pZCI6MTQ1NTYsInJvbGVfaWQiOjEyLCJyb2xlX2NvZGUiOiJVUzAxMiIsImV4cCI6MTc2MTc0MDM1NywiaWF0IjoxNzYxNzMzMTU3fQ.feLWrdQlq3K80Xm6fehhe_OBFEQD673SCaZ9B2-fv7M"
+        "Token" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxNDIwNiwidXNlcl90eXBlIjoxLCJwb3NpdGlvbl9pZCI6MTQ1NTYsInJvbGVfaWQiOjEyLCJyb2xlX2NvZGUiOiJVUzAxMiIsImV4cCI6MTc2MTc1MjkyMiwiaWF0IjoxNzYxNzQ1NTczfQ.K81QFFQ4-piJND4rppCXZj0YsBCn7MNnAnbgARfz6UY"
     ]);
 });
 
 Route::post('/cmosvc/shared/wcdpullgriev/', function () {
-    $client = new Client();
+    $client = new \GuzzleHttp\Client();
+
     try {
         $url = url('example.json');
         $response = $client->get($url);
+
         if ($response->getStatusCode() === 200) {
-            $data = json_decode($response->getBody(), true);
+            $dataArray = json_decode($response->getBody()); // array of details
+            if (is_array($dataArray)) {
+                // wrap inside an object named 'details'
+                $data = (object)['details' => $dataArray];
+            } else {
+                $data = $dataArray;
+            }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'File found and loaded successfully',
                 'Data' => $data,
-                "Exception" => false,
-                "Errors" => null,
-            ]);
-        } else {
-            return response()->json([
-                'status' => 'warning',
-                'message' => 'File found but returned status: ' . $response->getStatusCode(),
+                'Exception' => false,
+                'Errors' => null,
             ]);
         }
-    } catch (RequestException $e) {
+    } catch (\GuzzleHttp\Exception\RequestException $e) {
         return response()->json([
             'status' => 'error',
             'message' => 'Error: ' . $e->getMessage(),
         ]);
     }
 });
+
+
