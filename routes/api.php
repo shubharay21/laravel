@@ -38,7 +38,7 @@ Route::post('/cmosvc/user/login', function () {
         ],
         "Exception" => false,
         "Errors" => null,
-        "Token" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxNDIwNiwidXNlcl90eXBlIjoxLCJwb3NpdGlvbl9pZCI6MTQ1NTYsInJvbGVfaWQiOjEyLCJyb2xlX2NvZGUiOiJVUzAxMiIsImV4cCI6MTc2MTc1MjkyMiwiaWF0IjoxNzYxNzQ1NTczfQ.K81QFFQ4-piJND4rppCXZj0YsBCn7MNnAnbgARfz6UY"
+        "Token" => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxNDIwNiwidXNlcl90eXBlIjoxLCJwb3NpdGlvbl9pZCI6MTQ1NTYsInJvbGVfaWQiOjEyLCJyb2xlX2NvZGUiOiJVUzAxMiIsImV4cCI6MTc2MTgxMjA1MywiaWF0IjoxNzYxODA0ODUzfQ.loD8xzR6pXRuDKFHguUFvnmi8SJ5Yhtotcc5sLZzbp0"
     ]);
 });
 
@@ -74,4 +74,11 @@ Route::post('/cmosvc/shared/wcdpullgriev/', function () {
     }
 });
 
-
+Route::post('/cmosvc/shared/wcdpushgrievatr/', function () {
+    return response()->json([
+        'Data' => [
+            'Message' => 'Grievance status updated successfully',
+        ],
+        'Exception' => false,
+    ], 200);
+});
