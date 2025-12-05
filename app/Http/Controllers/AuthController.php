@@ -40,4 +40,9 @@ class AuthController extends Controller
             'token' => Auth::refresh()
         ]);
     }
+
+    public function backfromjb()
+    {
+        return response()->json('You are authenticated to pull data');
+    }
 }
