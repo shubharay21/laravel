@@ -2,8 +2,8 @@
 
 return [
 
-    'defaults' => [
-        'guard' => env('AUTH_GUARD', 'api'), // <-- set default to api if using JWT
+    /*'defaults' => [
+        'guard' => env('AUTH_GUARD', 'api'),
         'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),
     ],
 
@@ -12,13 +12,22 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+        'api' => [
+            'driver' => 'jwt',
+            'provider' => 'users',
+        ],
+    ],*/
+    'defaults' => [
+        'guard' => 'api',
+    ],
 
-        // ⭐ Add this for JWT
+    'guards' => [
         'api' => [
             'driver' => 'jwt',
             'provider' => 'users',
         ],
     ],
+
 
     'providers' => [
         'users' => [
