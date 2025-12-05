@@ -11,12 +11,14 @@ class AuthController extends Controller
     {
         $credentials = $request->only('email', 'password');
         if (!$token = Auth::attempt($credentials)) {
-            return response()->json(['error' => 'Invalid Credentials'], 401);
+            return response()->json([
+                'error' => 'Invalid credentials',
+                'is_success' => false,
+            ]);
         }
         return response()->json([
             'token' => $token,
-            'token_type' => 'bearer',
-            'expires_in' => Auth::factory()->getTTL() * 60
+            'is_success' => true,
         ]);
     }
 
