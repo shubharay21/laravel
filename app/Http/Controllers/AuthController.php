@@ -38,6 +38,6 @@ class AuthController extends Controller
 
     public function backfromjb()
     {
-        return response()->json('You are authenticated to pull data');
+        return response()->json(['message' =>'You are authenticated to pull data']);
     }
 }
