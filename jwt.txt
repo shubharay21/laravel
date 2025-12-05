@@ -5,38 +5,21 @@ php artisan vendor:publish --provider="Tymon\JWTAuth\Providers\LaravelServicePro
 php artisan jwt:secret
 -------
 config/auth.php
-<?php
-return [
-    'defaults' => [
-        'guard' => env('AUTH_GUARD', 'api'),
-        'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),
+'defaults' => [
+    // 'guard' => env('AUTH_GUARD', 'web'),
+    'guard' => env('AUTH_GUARD', 'api'),
+    'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),
+],
+'guards' => [
+    // 'web' => [
+    //     'driver' => 'session',
+    //     'provider' => 'users',
+    // ],
+    'api' => [
+        'driver' => 'jwt',
+        'provider' => 'users',
     ],
-    'guards' => [
-        'web' => [
-            'driver' => 'session',
-            'provider' => 'users',
-        ],
-        'api' => [
-            'driver' => 'jwt',
-            'provider' => 'users',
-        ],
-    ],
-    'providers' => [
-        'users' => [
-            'driver' => 'eloquent',
-            'model' => env('AUTH_MODEL', App\Models\User::class),
-        ],
-    ],
-    'passwords' => [
-        'users' => [
-            'provider' => 'users',
-            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
-            'expire' => 60,
-            'throttle' => 60,
-        ],
-    ],
-    'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
-];
+],
 -------
 app/Http/Middleware/JwtMiddleware.php
 <?php
@@ -74,6 +57,7 @@ bootstrap/app.php
 })
 -------
 php artisan make:controller AuthController
+app/Http/Controllers/AuthController.php
 <?php
 namespace App\Http\Controllers;
 use Illuminate\Http\Request;
@@ -109,7 +93,7 @@ class AuthController extends Controller
     }
 }
 -------
-routes/api.php:
+routes/api.php
 use App\Http\Controllers\AuthController;
 Route::post('login', [AuthController::class, 'login']);
 Route::middleware('jwt')->group(function () {
@@ -117,3 +101,15 @@ Route::middleware('jwt')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::post('refresh', [AuthController::class, 'refresh']);
 });
+-------
+app/Models/User.php
+use Tymon\JWTAuth\Contracts\JWTSubject;
+implements JWTSubject
+public function getJWTIdentifier()
+{
+    return $this->getKey();
+}
+public function getJWTCustomClaims()
+{
+    return [];
+}
