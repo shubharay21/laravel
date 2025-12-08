@@ -51,7 +51,7 @@ class LBService implements LBInterface
                     ]
                 ]);
                 $body = json_decode($response->getBody());
-                dd($body->message);
+                dd($body->is_sendtolb);
             } catch (\Exception $e) {
                 return 'Error: ' . $e->getMessage();
             }
