@@ -50,9 +50,8 @@ Route::post('/cmosvc/shared/wcdpullgriev/', function () {
         $response = $client->get($url);
 
         if ($response->getStatusCode() === 200) {
-            $dataArray = json_decode($response->getBody()); // array of details
+            $dataArray = json_decode($response->getBody());
             if (is_array($dataArray)) {
-                // wrap inside an object named 'details'
                 $data = (object)['details' => $dataArray];
             } else {
                 $data = $dataArray;
@@ -80,5 +79,55 @@ Route::post('/cmosvc/shared/wcdpushgrievatr/', function () {
             'Message' => 'Grievance status updated successfully',
         ],
         'Exception' => false,
+    ], 200);
+});
+
+Route::get('/WbDeath', function () {
+
+    // dd('ok');
+
+    try {
+        $client = new \GuzzleHttp\Client();
+        $url = url('example1.json');
+        $response = $client->get($url);
+
+        if ($response->getStatusCode() === 200) {
+
+            $dataArray = json_decode($response->getBody(), true);
+
+            return response()->json([
+                'data'       => $dataArray,
+                'TotalRec'   => count($dataArray),
+                'Exception'  => false,
+                'Errors'     => null
+            ], 200);
+        }
+
+        return response()->json([
+            "data"     => [],
+            "TotalRec" => 0,
+            "Exception" => false
+        ], 200);
+    } catch (\Exception $e) {
+
+        return response()->json([
+            'data'       => [],
+            'TotalRec'   => 0,
+            'Exception'  => true,
+            'Errors'     => [
+                'Message' => $e->getMessage()
+            ]
+        ], 500);
+    }
+});
+
+
+Route::post('/WbDeathDetailsCallBack', function () {
+
+    return response()->json([
+        'ResponseDesc'   => 'Details callback successfully processed.',
+        'HttpStatusCode' => 200,
+        'ResponseType'   => 'Success',
+        'Exception'      => false
     ], 200);
 });
