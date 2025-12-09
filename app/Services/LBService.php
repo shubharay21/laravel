@@ -45,15 +45,16 @@ class LBService implements LBInterface
             try {
                 $client = new Client();
                 $url = $this->baseurl . 'sendtolb';
-                $jsonUrl = url('example2.json');
-                $jsonContent = file_get_contents($jsonUrl);
-                $jsonData = json_decode($jsonContent, true);
+                $data = [
+                    "lb_application_id" => 150000000,
+                    "jb_poposed_dob" => "1997-11-21"
+                ];
                 $response = $client->post($url, [
                     'headers' => [
                         'Authorization' => 'Bearer ' . $this->athentication(),
                         'Accept'        => 'application/json',
                     ],
-                    'json' => $jsonData,
+                    'json' => $data,
                 ]);
                 $body = json_decode($response->getBody());
                 dd($body);
