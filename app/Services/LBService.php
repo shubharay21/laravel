@@ -54,7 +54,7 @@ class LBService implements LBInterface
                         'Authorization' => 'Bearer ' . $this->athentication(),
                         'Accept'        => 'application/json',
                     ],
-                    'json' => $data,
+                    'form_params' => $data,
                 ]);
                 $body = json_decode($response->getBody());
                 dd($body);
