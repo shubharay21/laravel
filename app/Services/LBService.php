@@ -38,22 +38,26 @@ class LBService implements LBInterface
             return 'Error: ' . $e->getMessage();
         }
     }
+
     public function sendtolb()
     {
         if ($this->athentication()) {
             try {
                 $client = new Client();
                 $url = $this->baseurl . 'sendtolb';
+                $jsonUrl = url('example2.json');
+                $jsonContent = file_get_contents($jsonUrl);
+                $jsonData = json_decode($jsonContent, true);
                 $response = $client->post($url, [
                     'headers' => [
                         'Authorization' => 'Bearer ' . $this->athentication(),
                         'Accept'        => 'application/json',
-                    ]
+                    ],
+                    'json' => $jsonData,
                 ]);
                 $body = json_decode($response->getBody());
-                dd($body->is_sendtolb);
+                dd($body);
             } catch (\Exception $e) {
-                return 'Error: ' . $e->getMessage();
             }
         } else {
             dd('Token is invalid');
