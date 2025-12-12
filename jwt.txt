@@ -1,0 +1,115 @@
+composer require tymon/jwt-auth
+-------
+php artisan vendor:publish --provider="Tymon\JWTAuth\Providers\LaravelServiceProvider"
+-------
+php artisan jwt:secret
+-------
+config/auth.php
+'defaults' => [
+    // 'guard' => env('AUTH_GUARD', 'web'),
+    'guard' => env('AUTH_GUARD', 'api'),
+    'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),
+],
+'guards' => [
+    // 'web' => [
+    //     'driver' => 'session',
+    //     'provider' => 'users',
+    // ],
+    'api' => [
+        'driver' => 'jwt',
+        'provider' => 'users',
+    ],
+],
+-------
+app/Http/Middleware/JwtMiddleware.php
+<?php
+namespace App\Http\Middleware;
+use Closure;
+use Exception;
+use Tymon\JWTAuth\Facades\JWTAuth;
+use Tymon\JWTAuth\Exceptions\JWTException;
+use Tymon\JWTAuth\Exceptions\TokenExpiredException;
+use Tymon\JWTAuth\Exceptions\TokenInvalidException;
+class JwtMiddleware
+{
+    public function handle($request, Closure $next)
+    {
+        try {
+            $user = JWTAuth::parseToken()->authenticate();
+        } catch (Exception $e) {
+            if ($e instanceof TokenInvalidException) {
+                return response()->json(['error' => 'Token is invalid'], 401);
+            }
+            if ($e instanceof TokenExpiredException) {
+                return response()->json(['error' => 'Token has expired'], 401);
+            }
+            return response()->json(['error' => 'Authorization Token not found'], 401);
+        }
+        return $next($request);
+    }
+}
+-------
+bootstrap/app.php
+->withMiddleware(function (Middleware $middleware): void {
+    $middleware->alias([
+        'jwt' => \App\Http\Middleware\JwtMiddleware::class,
+    ]);
+})
+-------
+php artisan make:controller AuthController
+app/Http/Controllers/AuthController.php
+<?php
+namespace App\Http\Controllers;
+use Illuminate\Http\Request;
+use Tymon\JWTAuth\Facades\JWTAuth;
+class AuthController extends Controller
+{
+    public function login(Request $request)
+    {
+        $credentials = $request->only('email', 'password');
+        if (!$token = auth()->attempt($credentials)) {
+            return response()->json(['error' => 'Invalid Credentials'], 401);
+        }
+        return response()->json([
+            'token' => $token,
+            'token_type' => 'bearer',
+            'expires_in' => auth()->factory()->getTTL() * 60
+        ]);
+    }
+    public function me()
+    {
+        return response()->json(auth()->user());
+    }
+    public function logout()
+    {
+        auth()->logout();
+        return response()->json(['message' => 'Logged out successfully']);
+    }
+    public function refresh()
+    {
+        return response()->json([
+            'token' => auth()->refresh()
+        ]);
+    }
+}
+-------
+routes/api.php
+use App\Http\Controllers\AuthController;
+Route::post('login', [AuthController::class, 'login']);
+Route::middleware('jwt')->group(function () {
+    Route::get('me', [AuthController::class, 'me']);
+    Route::post('logout', [AuthController::class, 'logout']);
+    Route::post('refresh', [AuthController::class, 'refresh']);
+});
+-------
+app/Models/User.php
+use Tymon\JWTAuth\Contracts\JWTSubject;
+implements JWTSubject
+public function getJWTIdentifier()
+{
+    return $this->getKey();
+}
+public function getJWTCustomClaims()
+{
+    return [];
+}

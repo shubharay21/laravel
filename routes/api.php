@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
-
+use App\Http\Controllers\AuthController;
 Route::post('/cmosvc/user/generateotp', function () {
     return response()->json([
         "Data" => [
@@ -131,3 +131,12 @@ Route::post('/WbDeathDetailsCallBack', function () {
         'Exception'      => false
     ], 200);
 });
+/*Route::post('jaibanglaapi/auth/login', [AuthController::class, 'login']);
+
+Route::middleware('jwt')->group(function () {
+    Route::post('logout', [AuthController::class, 'logout']);
+    Route::post('refresh', [AuthController::class, 'refresh']);
+    Route::post('backfromjb', [AuthController::class, 'backfromjb']);
+});*/
+
+
