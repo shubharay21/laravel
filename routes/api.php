@@ -139,4 +139,7 @@ Route::middleware('jwt')->group(function () {
     Route::post('backfromjb', [AuthController::class, 'backfromjb']);
 });*/
 
-
+Route::get('/jwt-check', function () {
+    return config('jwt.secret');
+});
+;
