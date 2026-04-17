@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use App\Http\Controllers\AuthController;
+
 Route::post('/cmosvc/user/generateotp', function () {
     return response()->json([
         "Data" => [
@@ -91,4 +92,52 @@ Route::middleware('jwt')->group(function () {
     Route::post('backfromjb', [AuthController::class, 'backfromjb']);
 });*/
 
-
+Route::get('/test', function () {
+    return response()->json([
+        "errorCurl" => '',
+        "result" => [
+            "RemoteIP" => null,
+            "ApplicationId" => -999,
+            "TriggeredByUserId" => "",
+            "ActionId" => 0,
+            "ActionMethodName" => "",
+            "ActionNameSpace" => "",
+            "GroupMethodName" => "",
+            "GroupNameSpace" => "",
+            "NoOfArguments" => 0,
+            "RequestType" => "",
+            "MethodArg" => [],
+            "MethodArgLite" => [],
+            "DbTuple" => [],
+            "SqlScriptList" => [],
+            "Base64ObjectString" => "",
+            "DeviceTypeId" => 0,
+            "DeviceId" => "",
+            "DbTupleLite" => [],
+            "ApiTrailId" => -999,
+            "TransactionId" => 0,
+            "Rrn" => "",
+            "ExtRefNo" => "",
+            "Base64Objects" => [],
+            "IsActionBlocked" => false,
+            "ActionName" => "",
+            "StoredProcArg" => [
+                "StoredProcName" => "",
+                "ArgumentListLite" => [],
+                "ReturnField" => [
+                    "Fn" => "",
+                    "Fv" => "",
+                    "Dt" => ""
+                ],
+                "DbServerId" => "",
+                "DefaultDBName" => ""
+            ],
+            "ResponseStatus" => "SUCCESS",
+            "ErrorMessage" => "This lot number is already exists",
+            "ErrorDetail" => "",
+            "ErrorCode" => "",
+            "ErrorLocation" => "",
+            "ExceptionLogId" => ""
+        ]
+    ], 200);
+});
