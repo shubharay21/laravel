@@ -83,8 +83,7 @@ Route::post('/cmosvc/shared/wcdpushgrievatr/', function () {
 });
 
 Route::get('/WbDeath', function () {
-
-    // dd('ok');
+        // dd('ok');
 
     try {
         $client = new \GuzzleHttp\Client();
@@ -98,6 +97,8 @@ Route::get('/WbDeath', function () {
             return response()->json([
                 'data'       => $dataArray,
                 'TotalRec'   => count($dataArray),
+                'CurrentPageIndex' =>  count($dataArray),
+                'TotalRecCurrectPage' =>  count($dataArray),
                 'Exception'  => false,
                 'Errors'     => null
             ], 200);
