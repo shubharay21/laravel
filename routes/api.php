@@ -316,12 +316,10 @@ Route::middleware('jwt')->group(function () {
 // });
 
 Route::post('/test', function (Request $request) {
-    $rawContent = $request->getContent(); 
+    $rawContent = $request->getContent();
     $data = json_decode($rawContent, true);
-
     $actionId = $data['ActionId'] ?? 'Not Found';
-
-    return response()->json(['received' => $actionId]);
+    // return response()->json(['received' => $actionId]);
     switch ($actionId) {
         case '1060':
             break;
@@ -402,12 +400,37 @@ Route::post('/test', function (Request $request) {
                         "RecordList" => [
                             [
                                 "Record" => [
-                                    ["Fn" => "lotNumber", "Fv" => "T303202602156078", "Dt" => ""],
-                                    ["Fn" => "totalRecord", "Fv" => "2716", "Dt" => ""],
-                                    ["Fn" => "date", "Fv" => "13-02-2026 18:15:48", "Dt" => ""],
-                                    ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
-                                    ["Fn" => "successCount", "Fv" => "2716", "Dt" => ""],
-                                    ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""]
+                                    [
+                                        "Fn" => "lotNumber",
+                                        "Fv" => "T303202604132443",
+                                        "Dt" => ""
+                                    ],
+
+                                    [
+                                        "Fn" => "totalRecord",
+                                        "Fv" => "16",
+                                        "Dt" => ""
+                                    ],
+                                    [
+                                        "Fn" => "date",
+                                        "Fv" => "20-04-2026 13:30:48",
+                                        "Dt" => ""
+                                    ],
+                                    [
+                                        "Fn" => "status",
+                                        "Fv" => "Completed",
+                                        "Dt" => ""
+                                    ],
+                                    [
+                                        "Fn" => "successCount",
+                                        "Fv" => "16",
+                                        "Dt" => ""
+                                    ],
+                                    [
+                                        "Fn" => "rejectedCount",
+                                        "Fv" => "0",
+                                        "Dt" => ""
+                                    ]
                                 ],
                                 "DbTupleLite" => null
                             ]
@@ -440,6 +463,58 @@ Route::post('/test', function (Request $request) {
         case '1069':
             break;
         case '1074':
+            $responseData = [
+                "RemoteIP" => null,
+                "ApplicationId" => -999,
+                "TriggeredByUserId" => "",
+                "ActionId" => 0,
+                "ActionMethodName" => "",
+                "ActionNameSpace" => "",
+                "GroupMethodName" => "",
+                "GroupNameSpace" => "",
+                "NoOfArguments" => 0,
+                "RequestType" => "",
+                "MethodArg" => [],
+                "MethodArgLite" => [],
+                "DbTuple" => [],
+                "SqlScriptList" => [],
+                "Base64ObjectString" => "",
+                "DeviceTypeId" => 0,
+                "DeviceId" => "",
+                "DbTupleLite" => [],
+                "ApiTrailId" => -999,
+                "TransactionId" => 0,
+                "Rrn" => "",
+                "ExtRefNo" => "",
+                "Base64Objects" => [],
+                "IsActionBlocked" => false,
+                "ActionName" => "",
+                "StoredProcArg" => [
+                    "StoredProcName" => "",
+                    "ArgumentListLite" => [],
+                    "ReturnField" => [
+                        "Fn" => "",
+                        "Fv" => "",
+                        "Dt" => ""
+                    ],
+                    "StoredProcArg" => [
+                        "StoredProcName" => "",
+                        "ArgumentListLite" => [],
+                        "ReturnField" => ["Fn" => "", "Fv" => "", "Dt" => ""],
+                        "DbServerId" => "",
+                        "DefaultDBName" => ""
+                    ],
+                    "DbServerId" => "",
+                    "DefaultDBName" => ""
+                ],
+                "ResponseStatus" => "SUCCESS",
+                "ErrorMessage" => "",
+                "ErrorDetail" => "",
+                "ErrorCode" => "",
+                "ErrorLocation" => "",
+                "ExceptionLogId" => ""
+            ];
+            return response()->json(json_encode($responseData), 200);
             break;
     }
 });
