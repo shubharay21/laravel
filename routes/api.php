@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use App\Http\Controllers\AuthController;
-
+use Illuminate\Http\Request;
 Route::post('/cmosvc/user/generateotp', function () {
     return response()->json([
         "Data" => [
@@ -139,52 +139,122 @@ Route::middleware('jwt')->group(function () {
 //             "ExceptionLogId" => ""
 //     ], 200);
 // });
-Route::post('/test', function () {
+// Route::post('/test', function () {
 
+//     $responseData = [
+//         "RemoteIP" => null,
+//         "ApplicationId" => -999,
+//         "TriggeredByUserId" => "",
+//         "ActionId" => 0,
+//         "ActionMethodName" => "",
+//         "ActionNameSpace" => "",
+//         "GroupMethodName" => "",
+//         "GroupNameSpace" => "",
+//         "NoOfArguments" => 0,
+//         "RequestType" => "",
+//         "MethodArg" => [],
+//         "MethodArgLite" => [],
+//         "DbTuple" => [],
+//         "SqlScriptList" => [],
+//         "Base64ObjectString" => "",
+//         "DeviceTypeId" => 0,
+//         "DeviceId" => "",
+//         "DbTupleLite" => [],
+//         "ApiTrailId" => -999,
+//         "TransactionId" => 0,
+//         "Rrn" => "",
+//         "ExtRefNo" => "",
+//         "Base64Objects" => [],
+//         "IsActionBlocked" => false,
+//         "ActionName" => "",
+//         "StoredProcArg" => [
+//             "StoredProcName" => "",
+//             "ArgumentListLite" => [],
+//             "ReturnField" => [
+//                 "Fn" => "",
+//                 "Fv" => "",
+//                 "Dt" => ""
+//             ],
+//             "DbServerId" => "",
+//             "DefaultDBName" => ""
+//         ],
+//         "ResponseStatus" => 'SUCCESS',
+//         "ErrorMessage" => 'This lot number is already exists',
+//         "ErrorDetail" => "",
+//         "ErrorCode" => "",
+//         "ErrorLocation" => "",
+//         "ExceptionLogId" => ""
+//     ];
+
+//     return response()->json(json_encode($responseData), 200);
+// });
+Route::post('/test', function (Request $request) {
+    $actionId = $request->input('ActionId');
+    
+    // ডিফল্ট রেসপন্স স্ট্রাকচার
     $responseData = [
-        "RemoteIP" => null,
-        "ApplicationId" => -999,
-        "TriggeredByUserId" => "",
-        "ActionId" => 0,
-        "ActionMethodName" => "",
-        "ActionNameSpace" => "",
-        "GroupMethodName" => "",
-        "GroupNameSpace" => "",
-        "NoOfArguments" => 0,
-        "RequestType" => "",
-        "MethodArg" => [],
-        "MethodArgLite" => [],
-        "DbTuple" => [],
-        "SqlScriptList" => [],
-        "Base64ObjectString" => "",
-        "DeviceTypeId" => 0,
-        "DeviceId" => "",
+        "ResponseStatus" => "SUCCESS",
+        "ErrorMessage" => "",
         "DbTupleLite" => [],
-        "ApiTrailId" => -999,
-        "TransactionId" => 0,
-        "Rrn" => "",
-        "ExtRefNo" => "",
-        "Base64Objects" => [],
-        "IsActionBlocked" => false,
-        "ActionName" => "",
-        "StoredProcArg" => [
-            "StoredProcName" => "",
-            "ArgumentListLite" => [],
-            "ReturnField" => [
-                "Fn" => "",
-                "Fv" => "",
-                "Dt" => ""
-            ],
-            "DbServerId" => "",
-            "DefaultDBName" => ""
-        ],
-        "ResponseStatus" => 'SUCCESS',
-        "ErrorMessage" => 'This lot number is already exists',
-        "ErrorDetail" => "",
-        "ErrorCode" => "",
-        "ErrorLocation" => "",
-        "ExceptionLogId" => ""
+        "ApplicationId" => $request->input('ApplicationId'),
+        "TriggeredByUserId" => $request->input('TriggeredByUserId'),
+        "ActionId" => $actionId
     ];
 
+    // ActionId অনুযায়ী ডেটা ডাইনামিক করা
+    switch ($actionId) {
+        
+        // ১. Lot Validation & Transaction Info (যেখানে success/failed count চেক করা হয়)
+        case '1068': // LotValidationInfoActionId
+        case '1073': // LotTransactionInfoActionId
+            $responseData["DbTupleLite"] = [
+                [
+                    "RecordList" => [
+                        [
+                            "Record" => [
+                                ["Fn" => "successCount", "Fv" => "50"], // আপনার প্রয়োজন অনুযায়ী সংখ্যা পাল্টান
+                                ["Fn" => "rejectedCount", "Fv" => "0"],
+                                ["Fn" => "status", "Fv" => "Completed"] // বা "Partial"
+                            ]
+                        ]
+                    ]
+                ]
+            ];
+            break;
+
+        // ২. Response Details (যেখানে এনক্রিপ্টেড ফাইল ডেটা ফেরত আসে)
+        case '1069': // LotValidationDetActionId
+        case '1074': // LotTransactionDetActionId
+            // এখানে Fv-তে থাকা ডেটা আপনার কোড decrypt এবং gzuncompress করে।
+            // টেস্টের জন্য আগে থেকে তৈরি করা কোনো বেইজ৬৪ এনক্রিপ্টেড স্ট্রিং এখানে দিতে পারেন।
+            $responseData["DbTupleLite"] = [
+                [
+                    "RecordList" => [
+                        [
+                            "Record" => [
+                                ["Fn" => "data", "Fv" => "DUMMY_ENCRYPTED_BASE64_DATA"] 
+                            ]
+                        ]
+                    ]
+                ]
+            ];
+            break;
+
+        // ৩. Upload Actions (যেখানে শুধু SUCCESS হলেই চলে)
+        case '1060': // LotValidationUploadActionId
+        case '1072': // LotTransactionUploadActionId
+            // এখানে অতিরিক্ত কোনো ডাটার প্রয়োজন নেই, শুধু SUCCESS থাকলেই ডাটাবেস আপডেট হবে
+            $responseData["ResponseStatus"] = "SUCCESS";
+            break;
+
+        // ৪. বিশেষ এরর টেস্ট (যেমন লট আগে থেকেই আছে কি না)
+        case 'TEST_ERROR': 
+            $responseData["ResponseStatus"] = "FAILURE";
+            $responseData["ErrorMessage"] = "This lot number is already exists";
+            break;
+    }
+
+    // আপনার কোডের Double JSON Decode হ্যান্ডেল করার জন্য:
+    // প্রথমে অ্যারেটিকে JSON এ কনভার্ট করা হলো, তারপর সেটাকে আবার JSON রেসপন্স হিসেবে পাঠানো হলো।
     return response()->json(json_encode($responseData), 200);
 });
