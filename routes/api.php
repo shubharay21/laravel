@@ -5,6 +5,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
+
 Route::post('/cmosvc/user/generateotp', function () {
     return response()->json([
         "Data" => [
@@ -188,73 +189,126 @@ Route::middleware('jwt')->group(function () {
 
 //     return response()->json(json_encode($responseData), 200);
 // });
+// Route::post('/test', function (Request $request) {
+//     $actionId = $request->input('ActionId');
+
+//     // ডিফল্ট রেসপন্স স্ট্রাকচার
+//     $responseData = [
+//         "ResponseStatus" => "SUCCESS",
+//         "ErrorMessage" => "",
+//         "DbTupleLite" => [],
+//         "ApplicationId" => $request->input('ApplicationId'),
+//         "TriggeredByUserId" => $request->input('TriggeredByUserId'),
+//         "ActionId" => $actionId
+//     ];
+
+//     // ActionId অনুযায়ী ডেটা ডাইনামিক করা
+//     switch ($actionId) {
+
+//         // ১. Lot Validation & Transaction Info (যেখানে success/failed count চেক করা হয়)
+//         case '1068': // LotValidationInfoActionId
+//         case '1073': // LotTransactionInfoActionId
+//             $responseData["DbTupleLite"] = [
+//                 [
+//                     "RecordList" => [
+//                         [
+//                             "Record" => [
+//                                 ["Fn" => "successCount", "Fv" => "50"], // আপনার প্রয়োজন অনুযায়ী সংখ্যা পাল্টান
+//                                 ["Fn" => "rejectedCount", "Fv" => "0"],
+//                                 ["Fn" => "status", "Fv" => "Completed"] // বা "Partial"
+//                             ]
+//                         ]
+//                     ]
+//                 ]
+//             ];
+//             break;
+
+//         // ২. Response Details (যেখানে এনক্রিপ্টেড ফাইল ডেটা ফেরত আসে)
+//         case '1069': // LotValidationDetActionId
+//         case '1074': // LotTransactionDetActionId
+//             // এখানে Fv-তে থাকা ডেটা আপনার কোড decrypt এবং gzuncompress করে।
+//             // টেস্টের জন্য আগে থেকে তৈরি করা কোনো বেইজ৬৪ এনক্রিপ্টেড স্ট্রিং এখানে দিতে পারেন।
+//             $responseData["DbTupleLite"] = [
+//                 [
+//                     "RecordList" => [
+//                         [
+//                             "Record" => [
+//                                 ["Fn" => "data", "Fv" => "DUMMY_ENCRYPTED_BASE64_DATA"] 
+//                             ]
+//                         ]
+//                     ]
+//                 ]
+//             ];
+//             break;
+
+//         // ৩. Upload Actions (যেখানে শুধু SUCCESS হলেই চলে)
+//         case '1060': // LotValidationUploadActionId
+//         case '1072': // LotTransactionUploadActionId
+//             // এখানে অতিরিক্ত কোনো ডাটার প্রয়োজন নেই, শুধু SUCCESS থাকলেই ডাটাবেস আপডেট হবে
+//             $responseData["ResponseStatus"] = "SUCCESS";
+//             break;
+
+//         // ৪. বিশেষ এরর টেস্ট (যেমন লট আগে থেকেই আছে কি না)
+//         case 'TEST_ERROR': 
+//             $responseData["ResponseStatus"] = "FAILURE";
+//             $responseData["ErrorMessage"] = "This lot number is already exists";
+//             break;
+//     }
+
+//     // আপনার কোডের Double JSON Decode হ্যান্ডেল করার জন্য:
+//     // প্রথমে অ্যারেটিকে JSON এ কনভার্ট করা হলো, তারপর সেটাকে আবার JSON রেসপন্স হিসেবে পাঠানো হলো।
+//     return response()->json(json_encode($responseData), 200);
+// });
+
 Route::post('/test', function (Request $request) {
-    $actionId = $request->input('ActionId');
-    
-    // ডিফল্ট রেসপন্স স্ট্রাকচার
+    $actionId = (string)$request->input('ActionId');
     $responseData = [
+        "RemoteIP" => null,
+        "ApplicationId" => (int)$request->input('ApplicationId', -999),
+        "TriggeredByUserId" => $request->input('TriggeredByUserId', ""),
+        "ActionId" => (int)$actionId,
         "ResponseStatus" => "SUCCESS",
         "ErrorMessage" => "",
         "DbTupleLite" => [],
-        "ApplicationId" => $request->input('ApplicationId'),
-        "TriggeredByUserId" => $request->input('TriggeredByUserId'),
-        "ActionId" => $actionId
+        "StoredProcArg" => [
+            "ReturnField" => ["Fn" => "", "Fv" => "", "Dt" => ""]
+        ]
     ];
-
-    // ActionId অনুযায়ী ডেটা ডাইনামিক করা
     switch ($actionId) {
-        
-        // ১. Lot Validation & Transaction Info (যেখানে success/failed count চেক করা হয়)
-        case '1068': // LotValidationInfoActionId
-        case '1073': // LotTransactionInfoActionId
-            $responseData["DbTupleLite"] = [
-                [
-                    "RecordList" => [
-                        [
-                            "Record" => [
-                                ["Fn" => "successCount", "Fv" => "50"], // আপনার প্রয়োজন অনুযায়ী সংখ্যা পাল্টান
-                                ["Fn" => "rejectedCount", "Fv" => "0"],
-                                ["Fn" => "status", "Fv" => "Completed"] // বা "Partial"
-                            ]
-                        ]
-                    ]
-                ]
-            ];
-            break;
-
-        // ২. Response Details (যেখানে এনক্রিপ্টেড ফাইল ডেটা ফেরত আসে)
-        case '1069': // LotValidationDetActionId
-        case '1074': // LotTransactionDetActionId
-            // এখানে Fv-তে থাকা ডেটা আপনার কোড decrypt এবং gzuncompress করে।
-            // টেস্টের জন্য আগে থেকে তৈরি করা কোনো বেইজ৬৪ এনক্রিপ্টেড স্ট্রিং এখানে দিতে পারেন।
-            $responseData["DbTupleLite"] = [
-                [
-                    "RecordList" => [
-                        [
-                            "Record" => [
-                                ["Fn" => "data", "Fv" => "DUMMY_ENCRYPTED_BASE64_DATA"] 
-                            ]
-                        ]
-                    ]
-                ]
-            ];
-            break;
-
-        // ৩. Upload Actions (যেখানে শুধু SUCCESS হলেই চলে)
-        case '1060': // LotValidationUploadActionId
-        case '1072': // LotTransactionUploadActionId
-            // এখানে অতিরিক্ত কোনো ডাটার প্রয়োজন নেই, শুধু SUCCESS থাকলেই ডাটাবেস আপডেট হবে
-            $responseData["ResponseStatus"] = "SUCCESS";
-            break;
-
-        // ৪. বিশেষ এরর টেস্ট (যেমন লট আগে থেকেই আছে কি না)
-        case 'TEST_ERROR': 
+        case '1060':
+        case '1072':
             $responseData["ResponseStatus"] = "FAILURE";
             $responseData["ErrorMessage"] = "This lot number is already exists";
             break;
+        case '1068':
+        case '1073':
+            $responseData["DbTupleLite"] = [[
+                "RecordList" => [[
+                    "Record" => [
+                        ["Fn" => "successCount", "Fv" => "100", "Dt" => ""],
+                        ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""],
+                        ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
+                        ["Fn" => "lotNumber", "Fv" => "T20260420", "Dt" => ""]
+                    ]
+                ]]
+            ]];
+            break;
+        case '1069':
+        case '1074':
+            $testData = "transaction_id|name|ifsc|accNo|uniqueId\n1|Test User|IFSC001|123456|BEN001";
+            $compressedData = base64_encode(gzcompress($testData));
+            $responseData["DbTupleLite"] = [[
+                "RecordList" => [[
+                    "Record" => [
+                        ["Fn" => "responseData", "Fv" => $compressedData, "Dt" => ""]
+                    ]
+                ]]
+            ]];
+            break;
+        default:
+            $responseData["ResponseStatus"] = "FAILURE";
+            $responseData["ErrorMessage"] = "Unknown Action ID";
+            break;
     }
-
-    // আপনার কোডের Double JSON Decode হ্যান্ডেল করার জন্য:
-    // প্রথমে অ্যারেটিকে JSON এ কনভার্ট করা হলো, তারপর সেটাকে আবার JSON রেসপন্স হিসেবে পাঠানো হলো।
     return response()->json(json_encode($responseData), 200);
 });
