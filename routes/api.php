@@ -260,57 +260,181 @@ Route::middleware('jwt')->group(function () {
 //     return response()->json(json_encode($responseData), 200);
 // });
 
+// Route::post('/test', function (Request $request) {
+//     $actionId = (string)$request->input('ActionId');
+//     $responseData = [
+//         "RemoteIP" => null,
+//         "ApplicationId" => (int)$request->input('ApplicationId', -999),
+//         "TriggeredByUserId" => $request->input('TriggeredByUserId', ""),
+//         "ActionId" => (int)$actionId,
+//         "ResponseStatus" => "SUCCESS",
+//         "ErrorMessage" => "",
+//         "DbTupleLite" => [],
+//         "StoredProcArg" => [
+//             "ReturnField" => ["Fn" => "", "Fv" => "", "Dt" => ""]
+//         ]
+//     ];
+//     switch ($actionId) {
+//         case '1060':
+//         case '1072':
+//             $responseData["ResponseStatus"] = "FAILURE";
+//             $responseData["ErrorMessage"] = "This lot number is already exists";
+//             break;
+//         case '1068':
+//         case '1073':
+//             $responseData["DbTupleLite"] = [[
+//                 "TableName" => "",
+//                 "RecordList" => [[
+//                     "Record" => [
+//                         ["Fn" => "successCount", "Fv" => "100", "Dt" => ""],
+//                         ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""],
+//                         ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
+//                         ["Fn" => "lotNumber", "Fv" => "T20260420", "Dt" => ""]
+//                     ],
+//                     "DbTupleLite" => null
+//                 ]]
+//             ]];
+//             break;
+//         case '1069':
+//         case '1074':
+//             $testData = "transaction_id|name|ifsc|accNo|uniqueId\n1|Test User|IFSC001|123456|BEN001";
+//             $compressedData = base64_encode(gzcompress($testData));
+//             $responseData["DbTupleLite"] = [[
+//                 "RecordList" => [[
+//                     "Record" => [
+//                         ["Fn" => "responseData", "Fv" => $compressedData, "Dt" => ""]
+//                     ]
+//                 ]]
+//             ]];
+//             break;
+//         default:
+//             $responseData["ResponseStatus"] = "FAILURE";
+//             $responseData["ErrorMessage"] = "Unknown Action ID";
+//             break;
+//     }
+//     return response()->json(json_encode($responseData), 200);
+// });
+
 Route::post('/test', function (Request $request) {
     $actionId = (string)$request->input('ActionId');
-    $responseData = [
-        "RemoteIP" => null,
-        "ApplicationId" => (int)$request->input('ApplicationId', -999),
-        "TriggeredByUserId" => $request->input('TriggeredByUserId', ""),
-        "ActionId" => (int)$actionId,
-        "ResponseStatus" => "SUCCESS",
-        "ErrorMessage" => "",
-        "DbTupleLite" => [],
-        "StoredProcArg" => [
-            "ReturnField" => ["Fn" => "", "Fv" => "", "Dt" => ""]
-        ]
-    ];
     switch ($actionId) {
         case '1060':
+            break;
         case '1072':
-            $responseData["ResponseStatus"] = "FAILURE";
-            $responseData["ErrorMessage"] = "This lot number is already exists";
+            $responseData = [
+                "RemoteIP" => null,
+                "ApplicationId" => -999,
+                "TriggeredByUserId" => "",
+                "ActionId" => 0,
+                "ActionMethodName" => "",
+                "ActionNameSpace" => "",
+                "GroupMethodName" => "",
+                "GroupNameSpace" => "",
+                "NoOfArguments" => 0,
+                "RequestType" => "",
+                "MethodArg" => [],
+                "MethodArgLite" => [],
+                "DbTuple" => [],
+                "SqlScriptList" => [],
+                "Base64ObjectString" => "",
+                "DeviceTypeId" => 0,
+                "DeviceId" => "",
+                "DbTupleLite" => [],
+                "ApiTrailId" => -999,
+                "TransactionId" => 0,
+                "Rrn" => "",
+                "ExtRefNo" => "",
+                "Base64Objects" => [],
+                "IsActionBlocked" => false,
+                "ActionName" => "",
+                "StoredProcArg" => [
+                    "StoredProcName" => "",
+                    "ArgumentListLite" => [],
+                    "ReturnField" => [
+                        "Fn" => "",
+                        "Fv" => "",
+                        "Dt" => ""
+                    ],
+                    "DbServerId" => "",
+                    "DefaultDBName" => ""
+                ],
+                "ResponseStatus" => 'SUCCESS',
+                "ErrorMessage" => 'This lot number is already exists',
+                "ErrorDetail" => "",
+                "ErrorCode" => "",
+                "ErrorLocation" => "",
+                "ExceptionLogId" => ""
+            ];
+            return response()->json(json_encode($responseData), 200);
             break;
         case '1068':
+            break;
         case '1073':
-            $responseData["DbTupleLite"] = [[
-                "TableName" => "",
-                "RecordList" => [[
-                    "Record" => [
-                        ["Fn" => "successCount", "Fv" => "100", "Dt" => ""],
-                        ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""],
-                        ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
-                        ["Fn" => "lotNumber", "Fv" => "T20260420", "Dt" => ""]
-                    ],
-                    "DbTupleLite" => null
-                ]]
-            ]];
+            $responseData = [
+                "RemoteIP" => null,
+                "ApplicationId" => (int)$request->input('ApplicationId', -999),
+                "TriggeredByUserId" => $request->input('TriggeredByUserId', ""),
+                "ActionId" => (int)$actionId,
+                "ActionMethodName" => "",
+                "ActionNameSpace" => "",
+                "GroupMethodName" => "",
+                "GroupNameSpace" => "",
+                "NoOfArguments" => 0,
+                "RequestType" => "",
+                "MethodArg" => [],
+                "MethodArgLite" => [],
+                "DbTuple" => [],
+                "SqlScriptList" => [],
+                "Base64ObjectString" => "",
+                "DeviceTypeId" => 0,
+                "DeviceId" => "",
+                "DbTupleLite" => [
+                    [
+                        "TableName" => "",
+                        "PrimaryKeyField" => "",
+                        "PrimaryKeyDbField" => "",
+                        "DbName" => "",
+                        "RecordList" => [
+                            [
+                                "Record" => [
+                                    ["Fn" => "lotNumber", "Fv" => "T303202602156078", "Dt" => ""],
+                                    ["Fn" => "totalRecord", "Fv" => "2716", "Dt" => ""],
+                                    ["Fn" => "date", "Fv" => "13-02-2026 18:15:48", "Dt" => ""],
+                                    ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
+                                    ["Fn" => "successCount", "Fv" => "2716", "Dt" => ""],
+                                    ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""]
+                                ],
+                                "DbTupleLite" => null
+                            ]
+                        ]
+                    ]
+                ],
+                "ApiTrailId" => -999,
+                "TransactionId" => 0,
+                "Rrn" => "",
+                "ExtRefNo" => "",
+                "Base64Objects" => [],
+                "IsActionBlocked" => false,
+                "ActionName" => "",
+                "StoredProcArg" => [
+                    "StoredProcName" => "",
+                    "ArgumentListLite" => [],
+                    "ReturnField" => ["Fn" => "", "Fv" => "", "Dt" => ""],
+                    "DbServerId" => "",
+                    "DefaultDBName" => ""
+                ],
+                "ResponseStatus" => "SUCCESS",
+                "ErrorMessage" => "",
+                "ErrorDetail" => "",
+                "ErrorCode" => "",
+                "ErrorLocation" => "",
+                "ExceptionLogId" => ""
+            ];
+            return response()->json(json_encode($responseData), 200);
             break;
         case '1069':
-        case '1074':
-            $testData = "transaction_id|name|ifsc|accNo|uniqueId\n1|Test User|IFSC001|123456|BEN001";
-            $compressedData = base64_encode(gzcompress($testData));
-            $responseData["DbTupleLite"] = [[
-                "RecordList" => [[
-                    "Record" => [
-                        ["Fn" => "responseData", "Fv" => $compressedData, "Dt" => ""]
-                    ]
-                ]]
-            ]];
             break;
-        default:
-            $responseData["ResponseStatus"] = "FAILURE";
-            $responseData["ErrorMessage"] = "Unknown Action ID";
+        case '1074':
             break;
     }
-    return response()->json(json_encode($responseData), 200);
 });
