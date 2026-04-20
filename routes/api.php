@@ -316,7 +316,10 @@ Route::middleware('jwt')->group(function () {
 // });
 
 Route::post('/test', function (Request $request) {
-    $actionId = (string)$request->input('ActionId');
+    $triggeredById = $request->input('TriggeredByUserId');
+    $applicationId = $request->input('ApplicationId');
+    $actionId      = $request->input('ActionId');
+    $methodArgs    = $request->input('MethodArg');
     switch ($actionId) {
         case '1060':
             break;
