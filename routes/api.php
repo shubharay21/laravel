@@ -283,13 +283,15 @@ Route::post('/test', function (Request $request) {
         case '1068':
         case '1073':
             $responseData["DbTupleLite"] = [[
+                "TableName" => "",
                 "RecordList" => [[
                     "Record" => [
                         ["Fn" => "successCount", "Fv" => "100", "Dt" => ""],
                         ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""],
                         ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
                         ["Fn" => "lotNumber", "Fv" => "T20260420", "Dt" => ""]
-                    ]
+                    ],
+                    "DbTupleLite" => null
                 ]]
             ]];
             break;
