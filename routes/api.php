@@ -316,10 +316,12 @@ Route::middleware('jwt')->group(function () {
 // });
 
 Route::post('/test', function (Request $request) {
-    $triggeredById = $request->input('TriggeredByUserId');
-    $applicationId = $request->input('ApplicationId');
-    $actionId      = $request->input('ActionId');
-    $methodArgs    = $request->input('MethodArg');
+    $rawContent = $request->getContent(); 
+    $data = json_decode($rawContent, true);
+
+    $actionId = $data['ActionId'] ?? 'Not Found';
+
+    return response()->json(['received' => $actionId]);
     switch ($actionId) {
         case '1060':
             break;
