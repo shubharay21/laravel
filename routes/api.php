@@ -322,6 +322,51 @@ Route::post('/test', function (Request $request) {
     // return response()->json(['received' => $actionId]);
     switch ($actionId) {
         case '1060':
+            $responseData = [
+                "RemoteIP" => null,
+                "ApplicationId" => -999,
+                "TriggeredByUserId" => "",
+                "ActionId" => 0,
+                "ActionMethodName" => "",
+                "ActionNameSpace" => "",
+                "GroupMethodName" => "",
+                "GroupNameSpace" => "",
+                "NoOfArguments" => 0,
+                "RequestType" => "",
+                "MethodArg" => [],
+                "MethodArgLite" => [],
+                "DbTuple" => [],
+                "SqlScriptList" => [],
+                "Base64ObjectString" => "",
+                "DeviceTypeId" => 0,
+                "DeviceId" => "",
+                "DbTupleLite" => [],
+                "ApiTrailId" => -999,
+                "TransactionId" => 0,
+                "Rrn" => "",
+                "ExtRefNo" => "",
+                "Base64Objects" => [],
+                "IsActionBlocked" => false,
+                "ActionName" => "",
+                "StoredProcArg" => [
+                    "StoredProcName" => "",
+                    "ArgumentListLite" => [],
+                    "ReturnField" => [
+                        "Fn" => "",
+                        "Fv" => "",
+                        "Dt" => ""
+                    ],
+                    "DbServerId" => "",
+                    "DefaultDBName" => ""
+                ],
+                "ResponseStatus" => 'SUCCESS',
+                "ErrorMessage" => '',
+                "ErrorDetail" => "",
+                "ErrorCode" => "",
+                "ErrorLocation" => "",
+                "ExceptionLogId" => ""
+            ];
+            return response()->json(json_encode($responseData), 200);
             break;
         case '1072':
             $responseData = [
