@@ -614,12 +614,12 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
                             [
                                 "Record" => [
                                     ["Fn" => "lotNumber", "Fv" => "F704202603928152", "Dt" => ""],
-                                    ["Fn" => "totalRecord", "Fv" => "55", "Dt" => ""],
+                                    ["Fn" => "totalRecord", "Fv" => "10", "Dt" => ""],
                                     ["Fn" => "date", "Fv" => "13-03-2026 16:38:48", "Dt" => ""],
                                     ["Fn" => "status", "Fv" => "Partial", "Dt" => ""],
-                                    ["Fn" => "successCount", "Fv" => "17", "Dt" => ""],
-                                    ["Fn" => "rejectedCount", "Fv" => "27", "Dt" => ""],
-                                    ["Fn" => "pendingCount", "Fv" => "11", "Dt" => ""]
+                                    ["Fn" => "successCount", "Fv" => "5", "Dt" => ""],
+                                    ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""],
+                                    ["Fn" => "pendingCount", "Fv" => "5", "Dt" => ""]
                                 ],
                                 "DbTupleLite" => null
                             ]
