@@ -315,7 +315,7 @@ Route::middleware('jwt')->group(function () {
 //     return response()->json(json_encode($responseData), 200);
 // });
 
-Route::post('/test', function (Request $request) {
+Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
     $rawContent = $request->getContent();
     $data = json_decode($rawContent, true);
     $actionId = $data['ActionId'] ?? 'Not Found';
@@ -416,6 +416,86 @@ Route::post('/test', function (Request $request) {
             return response()->json(json_encode($responseData), 200);
             break;
         case '1068':
+            $responseData = [
+                "RemoteIP" => null,
+                "ApplicationId" => -999,
+                "TriggeredByUserId" => "",
+                "ActionId" => 0,
+                "ActionMethodName" => "",
+                "ActionNameSpace" => "",
+                "GroupMethodName" => "",
+                "GroupNameSpace" => "",
+                "NoOfArguments" => 0,
+                "RequestType" => "",
+                "MethodArg" => [],
+                "MethodArgLite" => [],
+                "DbTuple" => [],
+                "SqlScriptList" => [],
+                "Base64ObjectString" => "",
+                "DeviceTypeId" => 0,
+                "DeviceId" => "",
+                "DbTupleLite" => [
+                    [
+                        "TableName" => "Dummy_Response_Table",
+                        "PrimaryKeyField" => "",
+                        "PrimaryKeyDbField" => "",
+                        "DbName" => "",
+                        "RecordList" => [
+                            [
+                                "Record" => [
+                                    [
+                                        "Fn" => "lotNumber",
+                                        "Fv" => "F303202603928055",
+                                        "Dt" => ""
+                                    ],
+                                    [
+                                        "Fn" => "totalRecord",
+                                        "Fv" => "40",
+                                        "Dt" => ""
+                                    ],
+                                    [
+                                        "Fn" => "successCount",
+                                        "Fv" => "29",
+                                        "Dt" => ""
+                                    ],
+                                    [
+                                        "Fn" => "rejectedCount",
+                                        "Fv" => "9",
+                                        "Dt" => ""
+                                    ],
+                                    [
+                                        "Fn" => "status",
+                                        "Fv" => "Partial",
+                                        "Dt" => ""
+                                    ]
+                                ],
+                                "DbTupleLite" => null
+                            ]
+                        ]
+                    ]
+                ],
+                "ApiTrailId" => -999,
+                "TransactionId" => 0,
+                "Rrn" => "",
+                "ExtRefNo" => "",
+                "Base64Objects" => [],
+                "IsActionBlocked" => false,
+                "ActionName" => "",
+                "StoredProcArg" => [
+                    "StoredProcName" => "",
+                    "ArgumentListLite" => [],
+                    "ReturnField" => ["Fn" => "", "Fv" => "", "Dt" => ""],
+                    "DbServerId" => "",
+                    "DefaultDBName" => ""
+                ],
+                "ResponseStatus" => "SUCCESS",
+                "ErrorMessage" => "",
+                "ErrorDetail" => "",
+                "ErrorCode" => "",
+                "ErrorLocation" => "",
+                "ExceptionLogId" => ""
+            ];
+            return response()->json(json_encode($responseData), 200);
             break;
         case '1073':
             $responseData = [
