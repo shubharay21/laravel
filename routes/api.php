@@ -315,7 +315,7 @@ Route::middleware('jwt')->group(function () {
 //     return response()->json(json_encode($responseData), 200);
 // });
 
-Route::post('/test', function (Request $request) {
+Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
     $rawContent = $request->getContent();
     $data = json_decode($rawContent, true);
 
