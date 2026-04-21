@@ -563,6 +563,72 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
             return response()->json(json_encode($responseData), 200);
             break;
         case '1069':
+            $responseData = [
+                "RemoteIP" => null,
+                "ApplicationId" => -999,
+                "TriggeredByUserId" => "",
+                "ActionId" => 0,
+                "ActionMethodName" => "",
+                "ActionNameSpace" => "",
+                "GroupMethodName" => "",
+                "GroupNameSpace" => "",
+                "NoOfArguments" => 0,
+                "RequestType" => "",
+                "MethodArg" => [],
+                "MethodArgLite" => [],
+                "DbTuple" => [],
+                "SqlScriptList" => [],
+                "Base64ObjectString" => "",
+                "DeviceTypeId" => 0,
+                "DeviceId" => "",
+                "DbTupleLite" => [
+                    [
+                        "TableName" => "",
+                        "PrimaryKeyField" => "",
+                        "PrimaryKeyDbField" => "",
+                        "DbName" => "",
+                        "RecordList" => [
+                            [
+                                "Record" => [
+                                    ["Fn" => "lotNumber", "Fv" => "F704202603928152", "Dt" => ""],
+                                    ["Fn" => "totalRecord", "Fv" => "55", "Dt" => ""],
+                                    ["Fn" => "date", "Fv" => "13-03-2026 16:38:48", "Dt" => ""],
+                                    ["Fn" => "status", "Fv" => "Partial", "Dt" => ""],
+                                    ["Fn" => "successCount", "Fv" => "17", "Dt" => ""],
+                                    ["Fn" => "rejectedCount", "Fv" => "27", "Dt" => ""],
+                                    ["Fn" => "pendingCount", "Fv" => "11", "Dt" => ""]
+                                ],
+                                "DbTupleLite" => null
+                            ]
+                        ]
+                    ]
+                ],
+                "ApiTrailId" => -999,
+                "TransactionId" => 0,
+                "Rrn" => "",
+                "ExtRefNo" => "",
+                "Base64Objects" => [],
+                "IsActionBlocked" => false,
+                "ActionName" => "",
+                "StoredProcArg" => [
+                    "StoredProcName" => "",
+                    "ArgumentListLite" => [],
+                    "ReturnField" => [
+                        "Fn" => "",
+                        "Fv" => "",
+                        "Dt" => ""
+                    ],
+                    "DbServerId" => "",
+                    "DefaultDBName" => ""
+                ],
+                "ResponseStatus" => "SUCCESS",
+                "ErrorMessage" => "",
+                "ErrorDetail" => "",
+                "ErrorCode" => "",
+                "ErrorLocation" => "",
+                "ExceptionLogId" => ""
+            ];
+            return response()->json(json_encode($responseData), 200);
             break;
         case '1074':
             // ইনকামিং ডাটা থেকে এনক্রিপ্টেড স্ট্রিং (Fv) বের করা
