@@ -201,3 +201,29 @@ Route::post('/coeailabkol_ai_anurup_v1_d2', function () {
     ], 404);
 
 });
+
+Route::post('/caste_certdet', function () {  
+ 
+    $filePath = public_path('caste.json');
+
+    if (file_exists($filePath)) {
+
+        // read json file
+        $jsonData = json_decode(
+            file_get_contents($filePath),
+            true
+        );
+
+        return response()->json(
+            $jsonData,
+            200
+        );
+
+    }
+
+    return response()->json([
+        "status" => "error",
+        "message" => "File not found"
+    ], 404);
+
+});
