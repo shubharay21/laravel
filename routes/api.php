@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use App\Http\Controllers\AuthController;
-Route::post('/cmosvc/user/generateotp', function () {
+Route::post('/cmo_generateotp', function () {
     return response()->json([
         "Data" => [
             "login_as_role" => [
@@ -25,7 +25,7 @@ Route::post('/cmosvc/user/generateotp', function () {
     ]);
 });
 
-Route::post('/cmosvc/user/login', function () {
+Route::post('/cmo_login', function () {
     return response()->json([
         "Data" => [
             "admin_user_id" => 14206,
@@ -42,7 +42,7 @@ Route::post('/cmosvc/user/login', function () {
     ]);
 });
 
-Route::post('/cmosvc/shared/wcdpullgriev/', function () {
+Route::post('/cmo_pullgriev', function () {
     $client = new \GuzzleHttp\Client();
 
     try {
@@ -52,7 +52,7 @@ Route::post('/cmosvc/shared/wcdpullgriev/', function () {
         if ($response->getStatusCode() === 200) {
             $dataArray = json_decode($response->getBody());
             if (is_array($dataArray)) {
-                $data = (object)['details' => $dataArray];
+                $data = (object) ['details' => $dataArray];
             } else {
                 $data = $dataArray;
             }
@@ -73,7 +73,7 @@ Route::post('/cmosvc/shared/wcdpullgriev/', function () {
     }
 });
 
-Route::post('/cmosvc/shared/wcdpushgrievatr/', function () {
+Route::post('/cmo_pushgriev', function () {
     return response()->json([
         'Data' => [
             'Message' => 'Grievance status updated successfully',
@@ -83,7 +83,7 @@ Route::post('/cmosvc/shared/wcdpushgrievatr/', function () {
 });
 
 Route::get('/WbDeath', function () {
-        // dd('ok');
+    // dd('ok');
 
     try {
         $client = new \GuzzleHttp\Client();
@@ -95,27 +95,27 @@ Route::get('/WbDeath', function () {
             $dataArray = json_decode($response->getBody(), true);
 
             return response()->json([
-                'data'       => $dataArray,
-                'TotalRec'   => count($dataArray),
-                'CurrentPageIndex' =>  count($dataArray),
-                'TotalRecCurrectPage' =>  count($dataArray),
-                'Exception'  => false,
-                'Errors'     => null
+                'data' => $dataArray,
+                'TotalRec' => count($dataArray),
+                'CurrentPageIndex' => count($dataArray),
+                'TotalRecCurrectPage' => count($dataArray),
+                'Exception' => false,
+                'Errors' => null
             ], 200);
         }
 
         return response()->json([
-            "data"     => [],
+            "data" => [],
             "TotalRec" => 0,
             "Exception" => false
         ], 200);
     } catch (\Exception $e) {
 
         return response()->json([
-            'data'       => [],
-            'TotalRec'   => 0,
-            'Exception'  => true,
-            'Errors'     => [
+            'data' => [],
+            'TotalRec' => 0,
+            'Exception' => true,
+            'Errors' => [
                 'Message' => $e->getMessage()
             ]
         ], 500);
@@ -126,10 +126,10 @@ Route::get('/WbDeath', function () {
 Route::post('/WbDeathDetailsCallBack', function () {
 
     return response()->json([
-        'ResponseDesc'   => 'Details callback successfully processed.',
+        'ResponseDesc' => 'Details callback successfully processed.',
         'HttpStatusCode' => 200,
-        'ResponseType'   => 'Success',
-        'Exception'      => false
+        'ResponseType' => 'Success',
+        'Exception' => false
     ], 200);
 });
 /*Route::post('jaibanglaapi/auth/login', [AuthController::class, 'login']);
@@ -143,4 +143,61 @@ Route::middleware('jwt')->group(function () {
 Route::get('/jwt-check', function () {
     return config('jwt.secret');
 });
-;
+
+Route::post('/dbt_login', function () {
+
+    return response()->json([
+        "apiResponseStatus" => 1,
+        "result" => "TEST_TOKEN_123456789",
+        "message" => "Login Successful",
+        "Exception" => false
+    ], 200);
+
+});
+
+Route::post('/dbt_savedata', function () {
+
+    $url = public_path('dbt.json');
+
+    if (file_exists($url)) {
+
+        $jsonData = json_decode(file_get_contents($url), true);
+
+        return response()->json([
+            "apiResponseStatus" => 1,
+            "result" => $jsonData
+        ], 200);
+
+    }
+
+    return response()->json([
+        "apiResponseStatus" => 0,
+        "result" => "File not found"
+    ], 404);
+
+});
+
+Route::post('/coeailabkol_ai_anurup_v1_d2', function () {
+
+    $url = public_path('anurup.json');
+
+    if (file_exists($url)) {
+
+        $jsonData = json_decode(
+            file_get_contents($url),
+            true
+        );
+
+        return response()->json(
+            $jsonData,
+            200
+        );
+
+    }
+
+    return response()->json([
+        "status" => "error",
+        "message" => "File not found"
+    ], 404);
+
+});
