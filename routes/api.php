@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use App\Http\Controllers\AuthController;
-Route::post('/cmo_generateotp', function () {
+Route::post('/cmosvc/user/generateotp/', function () {
     return response()->json([
         "Data" => [
             "login_as_role" => [
@@ -25,7 +25,7 @@ Route::post('/cmo_generateotp', function () {
     ]);
 });
 
-Route::post('/cmo_login', function () {
+Route::post('/cmosvc/user/login/', function () {
     return response()->json([
         "Data" => [
             "admin_user_id" => 14206,
@@ -42,7 +42,7 @@ Route::post('/cmo_login', function () {
     ]);
 });
 
-Route::post('/cmo_pullgriev', function () {
+Route::post('/cmosvc/shared/wcdpullgriev/', function () {
     $client = new \GuzzleHttp\Client();
 
     try {
@@ -73,7 +73,7 @@ Route::post('/cmo_pullgriev', function () {
     }
 });
 
-Route::post('/cmo_pushgriev', function () {
+Route::post('/cmosvc/shared/wcdpushgrievatr/', function () {
     return response()->json([
         'Data' => [
             'Message' => 'Grievance status updated successfully',
@@ -144,7 +144,7 @@ Route::get('/jwt-check', function () {
     return config('jwt.secret');
 });
 
-Route::post('/dbt_login', function () {
+Route::post('/backend/api/Auth/v1/ApiLogin', function () {
 
     return response()->json([
         "apiResponseStatus" => 1,
@@ -155,7 +155,7 @@ Route::post('/dbt_login', function () {
 
 });
 
-Route::post('/dbt_savedata', function () {
+Route::post('/backend/api/DBTData/v1/SaveDbtDataApi', function () {
 
     $url = public_path('dbt.json');
 
@@ -177,7 +177,7 @@ Route::post('/dbt_savedata', function () {
 
 });
 
-Route::post('/coeailabkol_ai_anurup_v1_d2', function () {
+Route::post('/wb/coeailabkol/ai_anurup_v1_d2', function () {
 
     $url = public_path('anurup.json');
 
@@ -202,8 +202,8 @@ Route::post('/coeailabkol_ai_anurup_v1_d2', function () {
 
 });
 
-Route::post('/caste_certdet', function () {  
- 
+Route::post('/wb/bcwd/certtificate_api/certdet', function () {
+
     $filePath = public_path('caste.json');
 
     if (file_exists($filePath)) {
@@ -225,5 +225,76 @@ Route::post('/caste_certdet', function () {
         "status" => "error",
         "message" => "File not found"
     ], 404);
+
+});
+
+Route::post('/wb/food-supplies/khadyasathi-info-via-aadhar', function () {
+
+    $request = request()->all();
+
+    $aadhar = $request['param'][0]['PData'];
+
+    if ($aadhar == "956670329613") {
+
+        return response()->json([
+            "status" => [
+                "msg" => "Success"
+            ],
+            "aadharResult" => [
+                "aadharList" => [
+                    [
+                        "NAME_AS_IN_AADHAR" => "TEST USER",
+                        "NAME_AS_IN_RC" => "TEST USER",
+                        "RationcardNo" => "RC123456",
+                        "Card_Status" => "Active",
+                        "FamilyID" => "FAM001",
+                        "DOB" => "1990-01-01",
+                        "LGD_BlockCode" => "123",
+                        "LGD_DistrictCode" => "456"
+                    ]
+                ]
+            ]
+        ]);
+
+    } else {
+
+        return response()->json([
+            "status" => [
+                "msg" => "Success"
+            ],
+            "aadharResult" => [
+                "aadharList" => [
+                    [
+                        "NAME_AS_IN_AADHAR" => "Not found"
+                    ]
+                ]
+            ]
+        ]);
+    }
+
+});
+
+Route::post('/wb/food-supplies/wbulc-info-via-aadhar', function () {
+
+    $request = request()->all();
+
+    $uid = $request['uidData'];
+
+    if ($uid == "666666666666") {
+
+        return response()->json([
+            "remarks" => "Success",
+            "name" => "TEST USER",
+            "txnTime" => "2024-01-10 12:30:00"
+        ]);
+
+    } else {
+
+        return response()->json([
+            "remarks" => "Success",
+            "name" => "Not found",
+            "txnTime" => "Not found"
+        ]);
+    }
 
 });
