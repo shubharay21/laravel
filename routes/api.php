@@ -1,10 +1,15 @@
 <?php
 
+use App\Helpers\Encryption;
 use Illuminate\Support\Facades\Route;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use App\Http\Controllers\AuthController;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
+use Symfony\Component\Console\Helper\Helper;
 
 Route::post('/cmosvc/user/generateotp', function () {
     return response()->json([
@@ -318,8 +323,24 @@ Route::middleware('jwt')->group(function () {
 Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
     $rawContent = $request->getContent();
     $data = json_decode($rawContent, true);
+
     $actionId = $data['ActionId'] ?? 'Not Found';
-    // return response()->json(['received' => $actionId]);
+    $lotFileNumber = null;
+    if (!empty($data['MethodArg'])) {
+        foreach ($data['MethodArg'] as $arg) {
+            if (($arg['FieldName'] ?? '') === '@lotNumber') {
+                $lotFileNumber = $arg['Value'] ?? null;
+                break;
+            }
+        }
+    }
+    $lotNumber = null; // Default to null
+    if ($lotFileNumber !== null) {
+        //  return response()->json(['received' => $lotFileNumber]);
+        $lotNumber = DB::connection('pgsql_payment')->table('lb_main.av_lot_master')->where('file_name', $lotFileNumber)->value('lot_no');
+        // return response()->json(['received' => $lotNumber]); 
+    }
+
     switch ($actionId) {
         case '1060':
             $responseData = [
@@ -455,7 +476,7 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
                                     ],
                                     [
                                         "Fn" => "successCount",
-                                        "Fv" => "5",
+                                        "Fv" => "10",
                                         "Dt" => ""
                                     ],
                                     [
@@ -465,7 +486,7 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
                                     ],
                                     [
                                         "Fn" => "status",
-                                        "Fv" => "Partial",
+                                        "Fv" => "Completed",
                                         "Dt" => ""
                                     ]
                                 ],
@@ -586,6 +607,112 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
             return response()->json(json_encode($responseData), 200);
             break;
         case '1069':
+            // Check if $lotNumber is null
+            if ($lotNumber === null) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Lot number not found in request data'
+                ], 400);
+            }
+
+            $lotNo = $lotNumber; // Assuming $lotNumber is the lot_no
+            $filename = "enc_beneficiary_response_" . $lotNo . ".txt"; // Generate filename based on lot_no
+            $lotBeneficiaryDetails = DB::connection('pgsql_payment')->table('lb_main.av_lot_details')->where('lot_no', $lotNo)->where('av_account_status', null)->where('name_status', null)->get();
+            $finalData = [];
+            $successLimit = 5; // (int) $responseSuccess;
+            $rejectedLimit = 0; // (int) $responseFailed;
+            $pendingLimit = 5; // (int) $responsePending;
+            $counter = 0;
+
+            // Check if data exists
+            if ($lotBeneficiaryDetails->isEmpty()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No beneficiary details found for lot number: ' . $lotNo
+                ], 404);
+            }
+
+            // return response()->json(['beneficiaryDetails' => $lotBeneficiaryDetails]); // Debugging line to check the fetched details
+            foreach ($lotBeneficiaryDetails as $lotBeneficiaryDetail) {
+                $ld_id = $lotBeneficiaryDetail->ld_id;
+                $ben_id = $lotBeneficiaryDetail->ben_id;
+                $success_status = "Y";
+                $success_remarks = "";
+                $success_status_code = "00";
+                $success_name_status = "Y";
+                $success_name_status_code = "00";
+                $success_name_response = $lotBeneficiaryDetail->ben_name;
+
+                $rejected_status = "N";
+                $rejected_remarks = "";
+                $rejected_status_code = "01";
+                $rejected_name_status = "N";
+                $rejected_name_status_code = "01"; // Fixed: was "01" || "51" which is invalid
+                $rejected_name_response = "";
+
+                $pending_status = "N";
+                $pending_remarks = "";
+                $pending_status_code = "51";
+                $pending_name_status = "N";
+                $pending_name_status_code = "";
+                $pending_name_response = "";
+
+                if ($counter < $successLimit) {
+                    $row = $ld_id . '|' . $ben_id . '|' . $success_status . '|' . $success_remarks . '|' . $success_status_code . '|' . $success_name_status . '|' . $success_name_status_code . '|' . $success_name_response . "\n";
+                } elseif ($counter < ($successLimit + $rejectedLimit)) {
+                    $row = $ld_id . '|' . $ben_id . '|' . $rejected_status . '|' . $rejected_remarks . '|' . $rejected_status_code . '|' . $rejected_name_status . '|' . $rejected_name_status_code . '|' . $rejected_name_response . "\n";
+                } else {
+                    continue; // Skip pending as per your code
+                }
+                $finalData[] = $row;
+                $counter++;
+            }
+
+            $decryptData = implode('', $finalData);
+
+            // Validate before storage and encryption
+            if (empty($decryptData)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No valid beneficiary data to process'
+                ], 400);
+            }
+
+            // Store in file
+            try {
+                Storage::put('bandhanbeneficiaryencdata/' . $filename, $decryptData);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Failed to store file: ' . $e->getMessage()
+                ], 500);
+            }
+
+            // Encrypt
+            $key = Config::get('bandhan.EncryptionKey');
+            $iv = Config::get('bandhan.IvData');
+
+            // Check if key and iv are configured
+            if (empty($key) || empty($iv)) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Encryption key or IV not configured'
+                ], 500);
+            }
+
+            try {
+                $data = Storage::get('bandhanbeneficiaryencdata/' . $filename);
+                $compressed = gzcompress($data, 9);
+                $base64OfCompressedData = base64_encode($compressed);
+                $encryptedData = Encryption::encryptCode($key, $iv, $base64OfCompressedData);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Encryption failed: ' . $e->getMessage()
+                ], 500);
+            }
+
+            // return response()->json(['encryptedData' => $encryptedData]); // Debugging line to check the encrypted data
             $responseData = [
                 "RemoteIP" => null,
                 "ApplicationId" => -999,
@@ -613,13 +740,14 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
                         "RecordList" => [
                             [
                                 "Record" => [
-                                    ["Fn" => "lotNumber", "Fv" => "F704202603928152", "Dt" => ""],
-                                    ["Fn" => "totalRecord", "Fv" => "10", "Dt" => ""],
-                                    ["Fn" => "date", "Fv" => "13-03-2026 16:38:48", "Dt" => ""],
+                                    ["Fn" => "Record", "Fv" => $encryptedData, "Dt" => ""],
+                                    ["Fn" => "lotNumber", "Fv" => $lotNo, "Dt" => ""],
+                                    ["Fn" => "totalRecord", "Fv" => (string)count($lotBeneficiaryDetails), "Dt" => ""],
+                                    ["Fn" => "date", "Fv" => date('d-m-Y H:i:s'), "Dt" => ""],
                                     ["Fn" => "status", "Fv" => "Partial", "Dt" => ""],
-                                    ["Fn" => "successCount", "Fv" => "5", "Dt" => ""],
-                                    ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""],
-                                    ["Fn" => "pendingCount", "Fv" => "5", "Dt" => ""]
+                                    ["Fn" => "successCount", "Fv" => (string)$successLimit, "Dt" => ""],
+                                    ["Fn" => "rejectedCount", "Fv" => (string)$rejectedLimit, "Dt" => ""],
+                                    ["Fn" => "pendingCount", "Fv" => (string)(count($lotBeneficiaryDetails) - $successLimit - $rejectedLimit), "Dt" => ""]
                                 ],
                                 "DbTupleLite" => null
                             ]
