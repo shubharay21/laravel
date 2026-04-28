@@ -1,0 +1,17 @@
+{
+  "status":"successful",
+  "message":"valid key",
+  "job_id":"15055981",
+  "result":{
+    "result":{
+      "name1":"parveen begum",
+      "name2":"afsana khatun",
+      "similarity_score":12.9
+    },
+    "metadata":{
+      "Model":"AI similarity score generation model",
+      "similarity_metric":"Cosine",
+      "Version":"V2"
+    }
+  }
+}

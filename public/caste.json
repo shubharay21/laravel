@@ -1,0 +1,11 @@
+{
+  "status": "success",
+  "httpcode": 200,
+  "match_found": 1,
+  "message": "Caste Certificate is Valid",
+  "data": [
+    {
+      "appl_name": "TESTUSER"
+    }
+  ]
+}
