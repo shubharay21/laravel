@@ -19,6 +19,9 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
     //     'received' => $rawContent
     // ]);
     $data = json_decode($rawContent, true);
+    // return response()->json([
+    //     'received' => $data
+    // ]);
     $actionId = $data['ActionId'] ?? 'Not Found';
     $lotFileNumber = null;
     if (!empty($data['MethodArg'])) {
@@ -122,6 +125,9 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
                 "ErrorLocation" => "",
                 "ExceptionLogId" => ""
             ];
+    //         return response()->json([
+    //     'received' => $responseData
+    // ]);
             return response()->json(json_encode($responseData), 200);
             break;
         case '1068':
@@ -512,6 +518,7 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
                     $finalData[] = $row;
                 }
                 $decryptData = implode('', $finalData);
+                // return response()->json(['received' => $decryptData]); 
                 if (empty($decryptData)) {
                     return response()->json([
                         'status' => 'error',
@@ -521,7 +528,8 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
 
                 // Store in file
                 try {
-                    Storage::put('bandhanbentransactionencdata/' . $filename, $decryptData);
+                    $is_stored = Storage::put('bandhanbentransactionencdata/' . $filename, $decryptData);
+                    // return response()->json(['received' => $is_stored]); 
                 } catch (\Exception $e) {
                     return response()->json([
                         'status' => 'error',
