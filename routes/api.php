@@ -125,9 +125,9 @@ Route::post('/Bone/LakshmiBhandar/1.0/1234', function (Request $request) {
                 "ErrorLocation" => "",
                 "ExceptionLogId" => ""
             ];
-    //         return response()->json([
-    //     'received' => $responseData
-    // ]);
+            //         return response()->json([
+            //     'received' => $responseData
+            // ]);
             return response()->json(json_encode($responseData), 200);
             break;
         case '1068':
@@ -910,4 +910,13 @@ Route::post('/wb/food-supplies/wbulc-info-via-aadhar', function () {
             "txnTime" => "Not found"
         ]);
     }
+});
+
+Route::post('/duplicatecheck', function () {
+    $request = request()->all();
+    return response()->json([
+        "isdup" => true,
+        "scheme" => 11,
+        "checkWith" => $request['checkWith']
+    ]);
 });
