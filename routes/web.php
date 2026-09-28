@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Livewire\UserTable;
 use App\Http\Controllers\LBController;
+
 Route::get('/', function () {
     return view('online');
 });
