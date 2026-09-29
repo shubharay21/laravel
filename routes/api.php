@@ -86,3 +86,9 @@ Route::post('/cmosvc/shared/wcdpushgrievatr/', function () {
 |
 */
 Route::any('/Bone/LakshmiBhandar/1.0/1234', [BandhanTransactionController::class, 'handleBandhanCallback']);
+
+Route::get('/test', function () {
+    return [
+        "message" => "test"
+    ];
+});
