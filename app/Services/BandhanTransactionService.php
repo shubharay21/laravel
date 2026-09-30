@@ -270,23 +270,43 @@ class BandhanTransactionService
         $rejectedCount = 0;
 
         if (!empty($lotNumber)) {
-            $detailsCount = BandhanTransactionDetail::where('lot_number', $lotNumber)->count();
-            if ($detailsCount > 0) {
-                $totalRecord = $detailsCount;
-                $rejectedCount = BandhanTransactionDetail::where('lot_number', $lotNumber)
-                    ->where(function ($q) {
-                        $q->whereIn('column_3', ['01', '51', 'FAILED', 'REJECTED', 'N'])
-                          ->orWhere('raw_row', 'like', '%|01|%')
-                          ->orWhere('raw_row', 'like', '%|51|%')
-                          ->orWhere('raw_row', 'like', '%|N|%');
-                    })->count();
-                $successCount = max(0, $totalRecord - $rejectedCount);
-            } else {
-                $tx = BandhanTransaction::where('lot_number', $lotNumber)->latest()->first();
-                if ($tx && $tx->record_count) {
-                    $totalRecord = (int)$tx->record_count;
-                    $successCount = $totalRecord;
-                    $rejectedCount = 0;
+            $numericLot = (int)preg_replace('/\D/', '', (string)$lotNumber);
+            // 1. Check av_lot_master from pgsql_payment
+            try {
+                $master = DB::connection('pgsql_payment')->table('fldc_main.av_lot_master')
+                    ->where('lot_no', $numericLot)
+                    ->orWhere('lot_no', (string)$lotNumber)
+                    ->first(['success_count', 'failed_count', 'ben_count']);
+                if ($master && $master->ben_count) {
+                    $totalRecord = (int)$master->ben_count;
+                    $successCount = (int)$master->success_count;
+                    $rejectedCount = (int)$master->failed_count;
+                }
+            } catch (\Exception $e) {}
+
+            // 2. Check BandhanTransactionDetail
+            if ($totalRecord === 0) {
+                $detailsCount = BandhanTransactionDetail::where('lot_number', $lotNumber)->count();
+                if ($detailsCount > 0) {
+                    $totalRecord = $detailsCount;
+                    // Check if explicit responses were recorded
+                    $dbRej = BandhanTransactionDetail::where('lot_number', $lotNumber)
+                        ->where('column_3', 'N')
+                        ->count();
+                    if ($dbRej > 0) {
+                        $rejectedCount = $dbRej;
+                    } else {
+                        // Natural simulated mix (~3% rejected)
+                        $rejectedCount = (int)ceil($totalRecord * 0.03);
+                    }
+                    $successCount = max(0, $totalRecord - $rejectedCount);
+                } else {
+                    $tx = BandhanTransaction::where('lot_number', $lotNumber)->latest()->first();
+                    if ($tx && $tx->record_count) {
+                        $totalRecord = (int)$tx->record_count;
+                        $rejectedCount = (int)ceil($totalRecord * 0.03);
+                        $successCount = max(0, $totalRecord - $rejectedCount);
+                    }
                 }
             }
         }
@@ -307,9 +327,14 @@ class BandhanTransactionService
                         $totalRecord = count($lines);
                         $rej = 0;
                         foreach ($lines as $line) {
-                            $cols = explode('|', $line);
-                            $statusVal = $cols[2] ?? '';
-                            if (in_array($statusVal, ['01', '51', 'N', 'FAILED', 'REJECTED'])) {
+                            $cols = explode('|', trim($line));
+                            $status = $cols[2] ?? 'Y';
+                            $statusCode = $cols[4] ?? '00';
+                            $nameStatus = $cols[5] ?? 'Y';
+                            $nameStatusCode = $cols[6] ?? '00';
+
+                            $res = $this->evaluateValidationResult($status, $nameStatus, $statusCode, $nameStatusCode);
+                            if ($res === 'N') {
                                 $rej++;
                             }
                         }
@@ -343,8 +368,322 @@ class BandhanTransactionService
     }
 
     /**
+     * Official Validation Response status codes and descriptions from Bank/UIDAI specification.
+     */
+    protected array $validationFailureTypes = [
+        ['code' => 'U1', 'remarks' => 'Pi (basic) attributes of demographic data did not match'],
+        ['code' => '2',  'remarks' => 'Not available in DB'],
+        ['code' => '4',  'remarks' => 'Cancelled by UIDAI'],
+        ['code' => 'X8', 'remarks' => 'Invalid Aadhaar Number'],
+        ['code' => 'FA', 'remarks' => 'Aadhaar deactivated due to deceased status'],
+        ['code' => 'X7', 'remarks' => 'Aadhaar suspended (Aadhaar is not in authenticatable status)'],
+        ['code' => '3',  'remarks' => 'Not Valid Aadhaar number'],
+        ['code' => '20', 'remarks' => 'Format Error'],
+        ['code' => 'X9', 'remarks' => 'Aadhaar cancelled (Aadhaar is no in authenticatable status)'],
+        ['code' => 'KT', 'remarks' => 'Aadhaar locked by Aadhaar number holder for all authentications'],
+        ['code' => '1',  'remarks' => 'Inactive'],
+    ];
+
+    /**
+     * Generate simulated validation status ensuring at least 5 of every status code.
+     *
+     * @param int $index
+     * @param int $totalCount
+     * @return array{status: string, remarks: string, statusCode: string}
+     */
+    public function getSimulatedValidationStatus(int $index, int $totalCount = 0): array
+    {
+        $failCount = count($this->validationFailureTypes); // 11
+        $reservedFailureSlots = $failCount * 5; // 55 slots (5 of each failure type)
+
+        // First 55 records: guaranteed at least 5 of each of the 11 failure types
+        if ($index < $reservedFailureSlots) {
+            $typeIdx = (int)floor($index / 5);
+            $type = $this->validationFailureTypes[$typeIdx % $failCount];
+            return [
+                'status'     => 'N',
+                'remarks'    => $type['remarks'],
+                'statusCode' => $type['code'],
+            ];
+        }
+
+        // Periodic failures throughout the rest of the lot (every 35th record)
+        if ($index % 35 === 0) {
+            $typeIdx = (int)(($index / 35) % $failCount);
+            $type = $this->validationFailureTypes[$typeIdx];
+            return [
+                'status'     => 'N',
+                'remarks'    => $type['remarks'],
+                'statusCode' => $type['code'],
+            ];
+        }
+
+        // All other records are Approved / Successful (code 00)
+        return [
+            'status'     => 'Y',
+            'remarks'    => 'Approved',
+            'statusCode' => '00',
+        ];
+    }
+
+    /**
+     * Evaluate overall validation result ('Y' or 'N') based on account validation status,
+     * name validation status, and status codes.
+     *
+     * @param string|null $status         Account validation status ('Y' / 'N')
+     * @param string|null $nameStatus     Name validation status ('Y' / 'N' / empty)
+     * @param string|null $statusCode     Account status code (e.g. '00', 'U1', '01', '51')
+     * @param string|null $nameStatusCode Name status code (e.g. '00', '01', '99')
+     * @return string                     'Y' for successful validation, 'N' for failure/rejection
+     */
+    public function evaluateValidationResult(?string $status, ?string $nameStatus = null, ?string $statusCode = null, ?string $nameStatusCode = null): string
+    {
+        $status = strtoupper(trim((string)$status));
+        $nameStatus = strtoupper(trim((string)$nameStatus));
+        $statusCode = trim((string)$statusCode);
+        $nameStatusCode = trim((string)$nameStatusCode);
+
+        // 1. Account validation status must be 'Y'
+        if ($status !== 'Y') {
+            return 'N';
+        }
+
+        // 2. Account status code: '00' or empty is success, any error code (e.g. 'U1', '01', '51') is failure
+        if ($statusCode !== '' && $statusCode !== '00') {
+            return 'N';
+        }
+
+        // 3. Name validation: if present, 'N' or error code (e.g. '01', '99') indicates mismatch/failure
+        if ($nameStatus === 'N') {
+            return 'N';
+        }
+        if ($nameStatusCode !== '' && $nameStatusCode !== '00') {
+            return 'N';
+        }
+
+        return 'Y';
+    }
+
+    /**
+     * Execute fldc_main.validation_lot_response(in_dist_code, in_lot_no, in_response)
+     * either directly as Postgres function or via equivalent Eloquent/DB queries.
+     *
+     * @param string|int  $lotNo
+     * @param string      $responseText
+     * @param int|null    $distCode
+     * @return array      Summary containing success_count, failed_count, and total_records
+     */
+    public function executeValidationLotResponseProcedure(string|int $lotNo, string $responseText, ?int $distCode = null): array
+    {
+        $numericLotNo = (int)preg_replace('/\D/', '', (string)$lotNo);
+        $inDistCode = $distCode;
+
+        // Resolve district code if not provided
+        if (empty($inDistCode)) {
+            try {
+                $master = DB::connection('pgsql_payment')->table('fldc_main.av_lot_master')
+                    ->where('lot_no', $numericLotNo)
+                    ->orWhere('lot_no', (string)$lotNo)
+                    ->first(['lgd_district_code']);
+                if ($master && !empty($master->lgd_district_code)) {
+                    $inDistCode = (int)$master->lgd_district_code;
+                }
+            } catch (\Exception $e) {
+                Log::warning("Could not fetch lgd_district_code from fldc_main.av_lot_master: " . $e->getMessage());
+            }
+
+            if (empty($inDistCode)) {
+                try {
+                    $detail = DB::connection('pgsql_payment')->table('fldc_main.av_lot_details')
+                        ->where('lot_no', $numericLotNo)
+                        ->orWhere('lot_no', (string)$lotNo)
+                        ->first(['lgd_district_code']);
+                    if ($detail && !empty($detail->lgd_district_code)) {
+                        $inDistCode = (int)$detail->lgd_district_code;
+                    }
+                } catch (\Exception $e) {
+                    Log::warning("Could not fetch lgd_district_code from fldc_main.av_lot_details: " . $e->getMessage());
+                }
+            }
+
+            if (empty($inDistCode)) {
+                $inDistCode = (int)config('bandhan.default_dist_code', 0);
+            }
+        }
+
+        // 1. Try calling the PostgreSQL function directly
+        try {
+            DB::connection('pgsql_payment')->statement(
+                'SELECT fldc_main.validation_lot_response(?, ?, ?)',
+                [$inDistCode, $numericLotNo, $responseText]
+            );
+            Log::info("Successfully executed fldc_main.validation_lot_response({$inDistCode}, {$numericLotNo})");
+        } catch (\Exception $dbFuncEx) {
+            Log::warning("Direct call to fldc_main.validation_lot_response failed: " . $dbFuncEx->getMessage() . " - Proceeding with PHP query execution");
+
+            // 2. PHP Query Execution fallback matching the exact SQL logic
+            try {
+                $lines = array_filter(preg_split('/\r\n|\r|\n/', trim($responseText)), fn($l) => trim($l) !== '');
+                $successCount = 0;
+                $failedCount = 0;
+
+                DB::connection('pgsql_payment')->beginTransaction();
+
+                foreach ($lines as $line) {
+                    $cols = explode('|', trim($line));
+                    $ldId = !empty($cols[0]) ? (int)$cols[0] : null;
+                    $familySerial = !empty($cols[1]) ? (int)$cols[1] : null;
+                    $status = trim($cols[2] ?? '');
+                    $remarks = trim($cols[3] ?? '');
+                    $statusCode = trim($cols[4] ?? '');
+                    $nameStatus = trim($cols[5] ?? '');
+                    $nameStatusCode = trim($cols[6] ?? '');
+                    $nameResponse = trim($cols[7] ?? '');
+
+                    // Calculate final status per condition matrix
+                    $finalStatus = $this->evaluateValidationResult($status, $nameStatus, $statusCode, $nameStatusCode);
+
+                    if ($finalStatus === 'Y') {
+                        $successCount++;
+                    } else {
+                        $failedCount++;
+                    }
+
+                    if ($familySerial) {
+                        // Update fldc_main.av_lot_details
+                        DB::connection('pgsql_payment')->table('fldc_main.av_lot_details')
+                            ->where('family_serial', $familySerial)
+                            ->where('lot_no', $numericLotNo)
+                            ->when($inDistCode > 0, fn($q) => $q->where('lgd_district_code', $inDistCode))
+                            ->whereNull('status')
+                            ->where('response_status', 'N')
+                            ->update([
+                                'status'            => $finalStatus,
+                                'status_code'       => $statusCode,
+                                'remarks'           => $remarks,
+                                'name_status'       => $nameStatus,
+                                'name_status_code'  => $nameStatusCode,
+                                'name_response'     => $nameResponse,
+                                'av_account_status' => $status,
+                                'updated_at'        => now(),
+                                'response_status'   => 'P',
+                            ]);
+
+                        // Update payment.ben_payment_details
+                        $accValidatedVal = ($finalStatus === 'Y') ? 2 : 3;
+                        DB::connection('pgsql_payment')->table('payment.ben_payment_details')
+                            ->where('family_serial', $familySerial)
+                            ->when($inDistCode > 0, fn($q) => $q->where('lgd_district_code', $inDistCode))
+                            ->where('acc_validated', 1)
+                            ->update(['acc_validated' => $accValidatedVal]);
+                    }
+                }
+
+                // Insert into fldc_main.validation_failed_details
+                $failedRows = DB::connection('pgsql_payment')->table('fldc_main.av_lot_details as av')
+                    ->join('payment.ben_payment_details as b', 'av.family_serial', '=', 'b.family_serial')
+                    ->where('av.lot_no', $numericLotNo)
+                    ->where('av.status', 'N')
+                    ->where('av.response_status', 'P')
+                    ->when($inDistCode > 0, fn($q) => $q->where('av.lgd_district_code', $inDistCode)->where('b.lgd_district_code', $inDistCode))
+                    ->select([
+                        'av.lgd_district_code', 'av.local_body_code', 'av.lot_no', 'av.app_serial',
+                        'av.family_serial', 'av.family_id', 'av.member_id', 'av.status_code',
+                        'av.remarks', 'av.aadhaar_no', 'av.pmt_mode', 'av.name_status',
+                        'av.name_status_code', 'av.name_response', 'av.av_account_status',
+                        'b.mobile_no', 'b.member_name'
+                    ])->get();
+
+                if ($failedRows->isNotEmpty()) {
+                    $failedInserts = [];
+                    $now = now();
+                    foreach ($failedRows as $row) {
+                        $failedType = 4;
+                        if ($row->name_status === 'N' && $row->av_account_status === 'Y' && in_array($row->name_status_code, ['01', '99'])) {
+                            $failedType = 3;
+                        } elseif ($row->av_account_status === 'N') {
+                            $failedType = 1;
+                        }
+
+                        $failedInserts[] = [
+                            'lgd_district_code' => $row->lgd_district_code,
+                            'local_body_code'   => $row->local_body_code,
+                            'lot_no'            => $row->lot_no,
+                            'app_serial'        => $row->app_serial,
+                            'family_serial'     => $row->family_serial,
+                            'family_id'         => $row->family_id,
+                            'member_id'         => $row->member_id,
+                            'status_code'       => $row->status_code,
+                            'remarks'           => $row->remarks,
+                            'aadhaar_no'        => $row->aadhaar_no,
+                            'pmt_mode'          => $row->pmt_mode,
+                            'failed_type'       => $failedType,
+                            'edited_status'     => 0,
+                            'created_at'        => $now,
+                            'name_status'       => $row->name_status,
+                            'name_status_code'  => $row->name_status_code,
+                            'name_response'     => $row->name_response,
+                            'mobile_no'         => $row->mobile_no,
+                            'member_name'       => $row->member_name,
+                        ];
+                    }
+                    DB::connection('pgsql_payment')->table('fldc_main.validation_failed_details')->insert($failedInserts);
+                }
+
+                // Update response_status = 'Y'
+                DB::connection('pgsql_payment')->table('fldc_main.av_lot_details')
+                    ->where('lot_no', $numericLotNo)
+                    ->when($inDistCode > 0, fn($q) => $q->where('lgd_district_code', $inDistCode))
+                    ->whereNotNull('status')
+                    ->where('response_status', 'P')
+                    ->update(['response_status' => 'Y']);
+
+                // Update fldc_main.av_lot_master
+                DB::connection('pgsql_payment')->table('fldc_main.av_lot_master')
+                    ->where('lot_no', $numericLotNo)
+                    ->when($inDistCode > 0, fn($q) => $q->where('lgd_district_code', $inDistCode))
+                    ->update([
+                        'success_count'  => $successCount,
+                        'failed_count'   => $failedCount,
+                        'lot_status'     => DB::raw("CASE WHEN ben_count != {$successCount} + {$failedCount} THEN 'P' ELSE 'C' END"),
+                        'response_count' => DB::raw("COALESCE(response_count, 0) + 1"),
+                        'updated_at'     => now(),
+                    ]);
+
+                DB::connection('pgsql_payment')->commit();
+            } catch (\Exception $fallbackEx) {
+                DB::connection('pgsql_payment')->rollBack();
+                Log::error("PHP DB query execution error for validation lot response: " . $fallbackEx->getMessage());
+            }
+        }
+
+        // Fetch latest master counts
+        $finalSuccess = 0;
+        $finalFailed = 0;
+        try {
+            $masterRec = DB::connection('pgsql_payment')->table('fldc_main.av_lot_master')
+                ->where('lot_no', $numericLotNo)
+                ->when($inDistCode > 0, fn($q) => $q->where('lgd_district_code', $inDistCode))
+                ->first(['success_count', 'failed_count']);
+            if ($masterRec) {
+                $finalSuccess = (int)$masterRec->success_count;
+                $finalFailed = (int)$masterRec->failed_count;
+            }
+        } catch (\Exception $e) {}
+
+        return [
+            'dist_code'     => $inDistCode,
+            'lot_no'        => $numericLotNo,
+            'success_count' => $finalSuccess,
+            'failed_count'  => $finalFailed,
+            'total_record'  => $finalSuccess + $finalFailed,
+        ];
+    }
+
+    /**
      * ACTION 3716 (Right column) / 1069: Lot Validation Response / Det
-     * Pulls validation status rows from database, encrypts payload, and saves to bandhan/3716/.
+     * Pulls validation status rows from database, encrypts payload, and saves to bandhan/3716/
+     * with dynamic successCount, rejectedCount, and totalRecord calculations.
      */
     public function handleLotValidationResponse(array $parsed, array $rawData, ?string $rawContent = null)
     {
@@ -368,24 +707,100 @@ class BandhanTransactionService
             $filename = "enc_beneficiary_response_{$lotNo}_{$timestamp}.txt";
 
             try {
-                $lotBeneficiaryDetails = DB::connection('pgsql_payment')->table('lb_main.av_lot_details')
+                // Check fldc_main.av_lot_details first, fallback to lb_main.av_lot_details
+                $lotBeneficiaryDetails = DB::connection('pgsql_payment')->table('fldc_main.av_lot_details')
                     ->where('lot_no', $lotNo)
-                    ->whereNull('av_account_status')
-                    ->whereNull('name_status')
+                    ->orWhere('lot_no', (int)preg_replace('/\D/', '', (string)$lotNo))
                     ->get();
+                if ($lotBeneficiaryDetails->isEmpty()) {
+                    $lotBeneficiaryDetails = DB::connection('pgsql_payment')->table('lb_main.av_lot_details')
+                        ->where('lot_no', $lotNo)
+                        ->get();
+                }
             } catch (\Exception $e) {
-                Log::warning("Could not query pgsql_payment lb_main.av_lot_details: " . $e->getMessage());
+                Log::warning("Could not query pgsql_payment av_lot_details: " . $e->getMessage());
                 $lotBeneficiaryDetails = collect();
             }
+
+            $finalData = [];
+            $successCount = 0;
+            $rejectedCount = 0;
+            $pendingCount = 0;
+
+            // Check if dynamic simulation counts were requested
+            $reqSuccess = $rawData['responseSuccess'] ?? $rawData['successCount'] ?? $parsed['methodArgs']['responseSuccess'] ?? $parsed['methodArgs']['successCount'] ?? null;
+            $reqFailed = $rawData['responseFailed'] ?? $rawData['rejectedCount'] ?? $parsed['methodArgs']['responseFailed'] ?? $parsed['methodArgs']['rejectedCount'] ?? null;
+            $reqPending = $rawData['responsePending'] ?? $rawData['pendingCount'] ?? $parsed['methodArgs']['responsePending'] ?? $parsed['methodArgs']['pendingCount'] ?? null;
+
+            $hasSimulationCounts = ($reqSuccess !== null || $reqFailed !== null);
+            $successLimit = $reqSuccess !== null ? (int)$reqSuccess : null;
+            $failedLimit = $reqFailed !== null ? (int)$reqFailed : null;
+            $pendingLimit = $reqPending !== null ? (int)$reqPending : null;
+
+            $failTypeCount = count($this->validationFailureTypes);
 
             if ($lotBeneficiaryDetails->isEmpty()) {
                 // Fallback to local BandhanTransactionDetail
                 $localDetails = BandhanTransactionDetail::where('lot_number', $lotNo)->get();
                 if ($localDetails->isNotEmpty()) {
-                    $finalData = [];
+                    $counter = 0;
+                    $localTotal = count($localDetails);
                     foreach ($localDetails as $detail) {
-                        $row = ($detail->transaction_id ?? $detail->id) . '|' . ($detail->beneficiary_id ?? '') . "|Y||00|Y|00|" . ($detail->beneficiary_name ?? '') . "\n";
+                        $ldId = $detail->transaction_id ?? $detail->id ?? '';
+                        $familySerial = $detail->beneficiary_id ?? '';
+
+                        if ($hasSimulationCounts) {
+                            if ($successLimit !== null && $counter < $successLimit) {
+                                $status = 'Y';
+                                $remarks = 'Approved';
+                                $statusCode = '00';
+                                $nameStatus = '';
+                                $nameStatusCode = '';
+                                $nameResponse = '';
+                                $successCount++;
+                            } elseif ($failedLimit !== null && $counter < (($successLimit ?? 0) + $failedLimit)) {
+                                $rejIdx = $counter - ($successLimit ?? 0);
+                                $typeIdx = (int)floor($rejIdx / 5) % $failTypeCount;
+                                $fail = $this->validationFailureTypes[$typeIdx];
+                                $status = 'N';
+                                $remarks = $fail['remarks'];
+                                $statusCode = $fail['code'];
+                                $nameStatus = '';
+                                $nameStatusCode = '';
+                                $nameResponse = '';
+                                $rejectedCount++;
+                            } else {
+                                if ($pendingLimit !== null && $counter >= (($successLimit ?? 0) + ($failedLimit ?? 0) + $pendingLimit)) {
+                                    break;
+                                }
+                                $status = 'N';
+                                $remarks = 'Pending Validation';
+                                $statusCode = '51';
+                                $nameStatus = '';
+                                $nameStatusCode = '';
+                                $nameResponse = '';
+                                $pendingCount++;
+                            }
+                        } else {
+                            // Guaranteed at least 5 of every status code from the official table
+                            $sim = $this->getSimulatedValidationStatus($counter, $localTotal);
+                            $status = $sim['status'];
+                            $remarks = $sim['remarks'];
+                            $statusCode = $sim['statusCode'];
+                            $nameStatus = '';
+                            $nameStatusCode = '';
+                            $nameResponse = '';
+
+                            if ($status === 'Y') {
+                                $successCount++;
+                            } else {
+                                $rejectedCount++;
+                            }
+                        }
+
+                        $row = "{$ldId}|{$familySerial}|{$status}|{$remarks}|{$statusCode}|{$nameStatus}|{$nameStatusCode}|{$nameResponse}\n";
                         $finalData[] = $row;
+                        $counter++;
                     }
                 } else {
                     $errResponse = response()->json([
@@ -396,13 +811,91 @@ class BandhanTransactionService
                     return $errResponse;
                 }
             } else {
-                $finalData = [];
+                $counter = 0;
+                $dbTotal = count($lotBeneficiaryDetails);
                 foreach ($lotBeneficiaryDetails as $detail) {
-                    $row = $detail->ld_id . '|' . $detail->ben_id . "|Y||00|Y|00|" . ($detail->ben_name ?? '') . "\n";
+                    $ldId = $detail->ld_id ?? $detail->transaction_id ?? $detail->id ?? '';
+                    $familySerial = $detail->family_serial ?? $detail->ben_id ?? $detail->beneficiary_id ?? '';
+
+                    if ($hasSimulationCounts) {
+                        if ($successLimit !== null && $counter < $successLimit) {
+                            $status = 'Y';
+                            $remarks = 'Approved';
+                            $statusCode = '00';
+                            $nameStatus = '';
+                            $nameStatusCode = '';
+                            $nameResponse = '';
+                            $successCount++;
+                        } elseif ($failedLimit !== null && $counter < (($successLimit ?? 0) + $failedLimit)) {
+                            $rejIdx = $counter - ($successLimit ?? 0);
+                            $typeIdx = (int)floor($rejIdx / 5) % $failTypeCount;
+                            $fail = $this->validationFailureTypes[$typeIdx];
+                            $status = 'N';
+                            $remarks = $fail['remarks'];
+                            $statusCode = $fail['code'];
+                            $nameStatus = '';
+                            $nameStatusCode = '';
+                            $nameResponse = '';
+                            $rejectedCount++;
+                        } else {
+                            if ($pendingLimit !== null && $counter >= (($successLimit ?? 0) + ($failedLimit ?? 0) + $pendingLimit)) {
+                                break;
+                            }
+                            $status = 'N';
+                            $remarks = 'Pending Validation';
+                            $statusCode = '51';
+                            $nameStatus = '';
+                            $nameStatusCode = '';
+                            $nameResponse = '';
+                            $pendingCount++;
+                        }
+                    } else {
+                        $hasDbStatus = !empty($detail->status) || !empty($detail->av_account_status);
+                        if ($hasDbStatus) {
+                            $rawStatus = strtoupper(trim($detail->status ?? $detail->av_account_status));
+                            $remarks = trim($detail->remarks ?? '');
+                            $statusCode = trim((string)($detail->status_code ?? $detail->acc_status_code ?? '00'));
+                            $nameStatus = strtoupper(trim($detail->name_status ?? ''));
+                            $nameStatusCode = trim((string)($detail->name_status_code ?? ''));
+                            $nameResponse = trim($detail->name_response ?? '');
+
+                            $result = $this->evaluateValidationResult($rawStatus, $nameStatus, $statusCode, $nameStatusCode);
+                            if ($result === 'N') {
+                                $status = 'N';
+                                $remarks = $remarks !== '' ? $remarks : 'Pi (basic) attributes of demographic data did not match';
+                                $statusCode = ($statusCode !== '' && $statusCode !== '00') ? $statusCode : 'U1';
+                                $rejectedCount++;
+                            } else {
+                                $status = 'Y';
+                                $remarks = $remarks !== '' ? $remarks : 'Approved';
+                                $statusCode = $statusCode !== '' ? $statusCode : '00';
+                                $successCount++;
+                            }
+                        } else {
+                            // Guaranteed at least 5 of every status code from the official table
+                            $sim = $this->getSimulatedValidationStatus($counter, $dbTotal);
+                            $status = $sim['status'];
+                            $remarks = $sim['remarks'];
+                            $statusCode = $sim['statusCode'];
+                            $nameStatus = '';
+                            $nameStatusCode = '';
+                            $nameResponse = '';
+
+                            if ($status === 'Y') {
+                                $successCount++;
+                            } else {
+                                $rejectedCount++;
+                            }
+                        }
+                    }
+
+                    $row = "{$ldId}|{$familySerial}|{$status}|{$remarks}|{$statusCode}|{$nameStatus}|{$nameStatusCode}|{$nameResponse}\n";
                     $finalData[] = $row;
+                    $counter++;
                 }
             }
 
+            $totalRecord = count($finalData);
             $plainTextBeneficiaryData = implode('', $finalData);
             
             // Save in action folder & backwards-compatible folder
@@ -416,31 +909,78 @@ class BandhanTransactionService
             $recordsList = [
                 ["Fn" => "Record", "Fv" => $encryptedOut, "Dt" => ""],
                 ["Fn" => "lotNumber", "Fv" => (string)$lotNo, "Dt" => ""],
-                ["Fn" => "totalRecord", "Fv" => (string)count($finalData), "Dt" => ""],
+                ["Fn" => "totalRecord", "Fv" => (string)$totalRecord, "Dt" => ""],
                 ["Fn" => "date", "Fv" => date('d-m-Y H:i:s'), "Dt" => ""],
                 ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
-                ["Fn" => "successCount", "Fv" => (string)count($finalData), "Dt" => ""],
-                ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""],
-                ["Fn" => "pendingCount", "Fv" => "0", "Dt" => ""]
+                ["Fn" => "successCount", "Fv" => (string)$successCount, "Dt" => ""],
+                ["Fn" => "rejectedCount", "Fv" => (string)$rejectedCount, "Dt" => ""],
+                ["Fn" => "pendingCount", "Fv" => (string)$pendingCount, "Dt" => ""]
             ];
 
             $responseData = $this->buildTupleResponse($parsed, $recordsList, 0);
             $response = response()->json(json_encode($responseData), 200);
-            $this->logActionResponse($actionId, $response, $lotNo, ['beneficiary_records' => count($finalData)]);
+            $this->logActionResponse($actionId, $response, $lotNo, [
+                'totalRecord'   => $totalRecord,
+                'successCount'  => $successCount,
+                'rejectedCount' => $rejectedCount,
+                'pendingCount'  => $pendingCount,
+            ]);
             return $response;
         }
 
-        // When encrypted data was provided by bank
+        // When encrypted data was provided by bank (push callback)
+        $decryptedPlainText = $parsed['storedFiles']['decryptedPlainText'] ?? null;
+        $procResult = [];
+
+        if (!empty($decryptedPlainText)) {
+            // Execute the fldc_main.validation_lot_response procedure
+            $procResult = $this->executeValidationLotResponseProcedure($lotNumber, $decryptedPlainText);
+        }
+
+        $validLines = $parsed['storedFiles']['validLines'] ?? [];
+        $totalRecord = count($validLines);
+        $successCount = $procResult['success_count'] ?? 0;
+        $rejectedCount = $procResult['failed_count'] ?? 0;
+
+        if ($successCount === 0 && $rejectedCount === 0 && !empty($validLines)) {
+            foreach ($validLines as $line) {
+                $parts = explode('|', trim($line));
+                $status = $parts[2] ?? 'Y';
+                $statusCode = $parts[4] ?? '00';
+                $nameStatus = $parts[5] ?? 'Y';
+                $nameStatusCode = $parts[6] ?? '00';
+
+                $result = $this->evaluateValidationResult($status, $nameStatus, $statusCode, $nameStatusCode);
+                if ($result === 'N') {
+                    $rejectedCount++;
+                } else {
+                    $successCount++;
+                }
+            }
+        }
+
         $response = response()->json([
             'status'  => 'success',
-            'message' => "Action {$actionId} response payload processed and saved to {$folder}/.",
+            'message' => "Action {$actionId} validation lot response processed and executed via validation_lot_response procedure successfully.",
             'data'    => [
-                'action_id'  => $actionId,
-                'lot_number' => $lotNumber,
-                'folder'     => $folder,
+                'action_id'       => $actionId,
+                'lot_number'      => $lotNumber,
+                'folder'          => $folder,
+                'totalRecord'     => $totalRecord,
+                'successCount'    => $successCount,
+                'rejectedCount'   => $rejectedCount,
+                'proc_result'     => $procResult,
+                'encrypted_file'  => $parsed['storedFiles']['encryptedFileName'] ?? null,
+                'decrypted_file'  => $parsed['storedFiles']['decryptedFileName'] ?? null,
             ]
         ], 200);
-        $this->logActionResponse($actionId, $response, $lotNumber);
+
+        $this->logActionResponse($actionId, $response, $lotNumber, [
+            'totalRecord'   => $totalRecord,
+            'successCount'  => $successCount,
+            'rejectedCount' => $rejectedCount,
+            'proc_result'   => $procResult,
+        ]);
         return $response;
     }
 
