@@ -427,6 +427,53 @@ class BandhanTransactionService
     }
 
     /**
+     * Official Transaction Response status codes and descriptions from Bank/NPCI specification.
+     */
+    protected array $transactionFailureTypes = [
+        ['code' => '96', 'hasAadhaar' => true,  'remarks' => 'PART-Aadhaar number not mapped to IIN - '],
+        ['code' => '95', 'hasAadhaar' => true,  'remarks' => 'PART-Inactive Aadhaar - ', 'suffix' => '.'],
+        ['code' => '64', 'hasAadhaar' => false, 'remarks' => ''],
+        ['code' => '01', 'hasAadhaar' => false, 'remarks' => ''],
+        ['code' => '51', 'hasAadhaar' => false, 'remarks' => ''],
+    ];
+
+    /**
+     * Generate simulated transaction status ensuring realistic failure distribution (~3% failure rate).
+     *
+     * @param int $index
+     * @param int $totalCount
+     * @param string|null $aadhaar
+     * @return array{statusCode: string, remarks: string, status: string}
+     */
+    public function getSimulatedTransactionStatus(int $index, int $totalCount = 0, ?string $aadhaar = null): array
+    {
+        $failCount = count($this->transactionFailureTypes); // 5
+
+        // Periodic failures throughout the lot (every 30th record: ~3.3% failure rate)
+        if ($index > 0 && $index % 30 === 0) {
+            $typeIdx = (int)(($index / 30) % $failCount);
+            $type = $this->transactionFailureTypes[$typeIdx];
+            $remarks = $type['remarks'];
+            if (!empty($type['hasAadhaar']) && !empty($aadhaar)) {
+                $remarks .= $aadhaar . ($type['suffix'] ?? '');
+            }
+
+            return [
+                'statusCode' => $type['code'],
+                'remarks'    => $remarks,
+                'status'     => 'FAILED',
+            ];
+        }
+
+        // All other records are Successful (code 00)
+        return [
+            'statusCode' => '00',
+            'remarks'    => '',
+            'status'     => 'SUCCESS',
+        ];
+    }
+
+    /**
      * Evaluate overall validation result ('Y' or 'N') based on account validation status,
      * name validation status, and status codes.
      *
@@ -986,13 +1033,82 @@ class BandhanTransactionService
 
     /**
      * ACTION 3717 (Right column) / 1072: Lot Transaction Upload
-     * Receives and processes lot transaction upload, saving files into bandhan/3717/.
+     * Receives and processes lot transaction upload, persists records into database, and saves files into bandhan/3717/.
      */
     public function handleLotTransactionUpload(array $parsed, array $rawData, ?string $rawContent = null)
     {
         $actionId = $parsed['actionId'];
         $folder = $this->getActionFolder($actionId);
+        $triggeredByUserId = $parsed['triggeredByUserId'];
+        $applicationId = $parsed['applicationId'];
         $lotNumber = $parsed['lotNumber'];
+        $recordCount = $parsed['recordCount'];
+        $decryptedPlainText = $parsed['storedFiles']['decryptedPlainText'] ?? null;
+        $totalBeneficiariesCount = $parsed['storedFiles']['totalBeneficiariesCount'] ?? 0;
+        $validLines = $parsed['storedFiles']['validLines'] ?? [];
+        $encryptedRelativePath = $parsed['storedFiles']['encryptedRelativePath'] ?? null;
+        $decryptedRelativePath = $parsed['storedFiles']['decryptedRelativePath'] ?? null;
+        $encryptedFileName = $parsed['storedFiles']['encryptedFileName'] ?? null;
+        $decryptedFileName = $parsed['storedFiles']['decryptedFileName'] ?? null;
+
+        $transactionRecord = null;
+
+        // Perform Database Insertion for transaction lot upload
+        if (!empty($decryptedPlainText)) {
+            DB::beginTransaction();
+            try {
+                $transactionRecord = BandhanTransaction::create([
+                    'triggered_by_user_id' => $triggeredByUserId,
+                    'application_id'       => $applicationId,
+                    'action_id'            => $actionId,
+                    'lot_number'           => $lotNumber,
+                    'record_count'         => $recordCount ?? $totalBeneficiariesCount,
+                    'raw_payload_path'     => $encryptedRelativePath ?? "bandhan/{$actionId}/{$encryptedFileName}",
+                    'decrypted_file_path'  => $decryptedRelativePath ? ($decryptedRelativePath) : null,
+                    'decrypted_data'       => $decryptedPlainText,
+                    'status'               => 'SUCCESS',
+                ]);
+
+                if ($totalBeneficiariesCount > 0 && !empty($validLines)) {
+                    $recordsToInsert = [];
+                    $now = now();
+                    $batchSize = 1000;
+
+                    foreach ($validLines as $line) {
+                        $trimmed = trim($line);
+                        $cols = explode('|', $trimmed);
+
+                        // Expected 3717 row: transaction_id|beneficiary_id|amount|beneficiary_name|aadhaar_or_account_number|
+                        $recordsToInsert[] = [
+                            'bandhan_transaction_id' => $transactionRecord->id,
+                            'lot_number'             => $lotNumber,
+                            'transaction_id'         => isset($cols[0]) && $cols[0] !== '' ? $cols[0] : null,
+                            'beneficiary_id'         => isset($cols[1]) && $cols[1] !== '' ? $cols[1] : null,
+                            'column_3'               => isset($cols[2]) && $cols[2] !== '' ? $cols[2] : null, // amount
+                            'beneficiary_name'       => isset($cols[3]) && $cols[3] !== '' ? $cols[3] : null,
+                            'account_number'         => isset($cols[4]) && $cols[4] !== '' ? $cols[4] : null, // Aadhaar / Account
+                            'raw_row'                => $trimmed,
+                            'created_at'             => $now,
+                            'updated_at'             => $now,
+                        ];
+
+                        if (count($recordsToInsert) >= $batchSize) {
+                            BandhanTransactionDetail::insert($recordsToInsert);
+                            $recordsToInsert = [];
+                        }
+                    }
+
+                    if (!empty($recordsToInsert)) {
+                        BandhanTransactionDetail::insert($recordsToInsert);
+                    }
+                }
+
+                DB::commit();
+            } catch (\Exception $dbEx) {
+                DB::rollBack();
+                Log::error("DB Insert Error during Bandhan callback (ActionId {$actionId}): " . $dbEx->getMessage());
+            }
+        }
 
         if ($actionId === '1072') {
             $responseData = $this->buildStandardSuccessResponse($parsed, 'This lot number is already exists');
@@ -1005,21 +1121,22 @@ class BandhanTransactionService
             'status'  => 'success',
             'message' => "Action {$actionId} lot transaction upload processed and saved into {$folder}/.",
             'data'    => [
+                'transaction_id'          => $transactionRecord ? $transactionRecord->id : null,
                 'action_id'               => $actionId,
                 'lot_number'              => $lotNumber,
                 'folder'                  => $folder,
-                'encrypted_file'          => $parsed['storedFiles']['encryptedFileName'] ?? null,
-                'decrypted_file'          => $parsed['storedFiles']['decryptedFileName'] ?? null,
-                'decrypted_records_count' => $parsed['storedFiles']['totalBeneficiariesCount'] ?? 0,
+                'encrypted_file'          => $encryptedFileName,
+                'decrypted_file'          => $decryptedFileName,
+                'decrypted_records_count' => $totalBeneficiariesCount,
             ]
         ], 200);
-        $this->logActionResponse($actionId, $response, $lotNumber);
+        $this->logActionResponse($actionId, $response, $lotNumber, ['transaction_id' => $transactionRecord?->id]);
         return $response;
     }
 
     /**
      * ACTION 3718 (Right column) / 1073: Lot Transaction Info
-     * Queries lot transaction status and counts, returning formatted response.
+     * Queries database/storage for lot transaction status and counts, returning formatted response.
      */
     public function handleLotTransactionInfo(array $parsed, array $rawData, ?string $rawContent = null)
     {
@@ -1027,24 +1144,79 @@ class BandhanTransactionService
         $lotNumber = $parsed['lotNumber'];
         $recordCount = $parsed['recordCount'];
 
+        $totalRecord = 0;
+        $successCount = 0;
+        $rejectedCount = 0;
+
+        if (!empty($lotNumber)) {
+            // 1. Check local BandhanTransactionDetail
+            $detailsCount = BandhanTransactionDetail::where('lot_number', $lotNumber)->count();
+            if ($detailsCount > 0) {
+                $totalRecord = $detailsCount;
+                $rejectedCount = (int)ceil($totalRecord * 0.03); // ~3% simulated rejection rate matching 3719
+                $successCount = max(0, $totalRecord - $rejectedCount);
+            } else {
+                // 2. Check BandhanTransaction header
+                $tx = BandhanTransaction::where('lot_number', $lotNumber)->latest()->first();
+                if ($tx && $tx->record_count) {
+                    $totalRecord = (int)$tx->record_count;
+                    $rejectedCount = (int)ceil($totalRecord * 0.03);
+                    $successCount = max(0, $totalRecord - $rejectedCount);
+                }
+            }
+        }
+
+        // 3. Fallback to storage files in bandhan/3717 or bandhan/3718 if not found in database
+        if ($totalRecord === 0 && !empty($lotNumber)) {
+            $lotSuffixClean = '_' . preg_replace('/[^A-Za-z0-9_-]/', '', (string)$lotNumber);
+            $searchFolders = ["bandhan/{$actionId}", 'bandhan/3717', 'bandhanbentransactionencdata'];
+
+            foreach ($searchFolders as $sFolder) {
+                if (Storage::disk('local')->exists($sFolder)) {
+                    $files = Storage::disk('local')->files($sFolder);
+                    $matchingFiles = array_filter($files, fn($f) => str_contains($f, "decrypted{$lotSuffixClean}"));
+                    if (!empty($matchingFiles)) {
+                        $latestFile = end($matchingFiles);
+                        $fileData = Storage::disk('local')->get($latestFile);
+                        $lines = array_filter(preg_split('/\r\n|\r|\n/', trim($fileData)), fn($l) => trim($l) !== '');
+                        $totalRecord = count($lines);
+                        $rejectedCount = (int)ceil($totalRecord * 0.03);
+                        $successCount = max(0, $totalRecord - $rejectedCount);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($totalRecord === 0 && !empty($recordCount)) {
+            $totalRecord = (int)$recordCount;
+            $rejectedCount = (int)ceil($totalRecord * 0.03);
+            $successCount = max(0, $totalRecord - $rejectedCount);
+        }
+
         $recordsList = [
             ["Fn" => "lotNumber", "Fv" => (string)($lotNumber ?? "T303202604132443"), "Dt" => ""],
-            ["Fn" => "totalRecord", "Fv" => (string)($recordCount ?? "16"), "Dt" => ""],
+            ["Fn" => "totalRecord", "Fv" => (string)$totalRecord, "Dt" => ""],
             ["Fn" => "date", "Fv" => date('d-m-Y H:i:s'), "Dt" => ""],
             ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
-            ["Fn" => "successCount", "Fv" => (string)($recordCount ?? "16"), "Dt" => ""],
-            ["Fn" => "rejectedCount", "Fv" => "0", "Dt" => ""]
+            ["Fn" => "successCount", "Fv" => (string)$successCount, "Dt" => ""],
+            ["Fn" => "rejectedCount", "Fv" => (string)$rejectedCount, "Dt" => ""]
         ];
 
         $responseData = $this->buildTupleResponse($parsed, $recordsList);
         $response = response()->json(json_encode($responseData), 200);
-        $this->logActionResponse($actionId, $response, $lotNumber, ['recordCount' => $recordCount]);
+        $this->logActionResponse($actionId, $response, $lotNumber, [
+            'totalRecord'   => $totalRecord,
+            'successCount'  => $successCount,
+            'rejectedCount' => $rejectedCount,
+        ]);
         return $response;
     }
 
     /**
      * ACTION 3719 (Right column) / 1074: Lot Transaction Response / Det
-     * Pulls transaction detail rows from database, encrypts payload, and saves to bandhan/3719/.
+     * Pulls transaction detail rows from database/storage, dynamically constructs transaction response,
+     * encrypts payload, and saves to bandhan/3719/.
      */
     public function handleLotTransactionResponse(array $parsed, array $rawData, ?string $rawContent = null)
     {
@@ -1053,6 +1225,7 @@ class BandhanTransactionService
         $encryptedData = $parsed['encryptedData'];
         $folder = $this->getActionFolder($actionId);
 
+        // CASE 1: Outbound Pull Request (Generate and return encrypted transaction response)
         if (empty($encryptedData)) {
             $lotNo = $lotNumber;
             if ($lotNo === null) {
@@ -1076,30 +1249,86 @@ class BandhanTransactionService
                 $lotBeneficiaryDetails = collect();
             }
 
-            if ($lotBeneficiaryDetails->isEmpty()) {
+            $finalData = [];
+
+            if ($lotBeneficiaryDetails->isNotEmpty()) {
+                $idx = 0;
+                $total = $lotBeneficiaryDetails->count();
+                foreach ($lotBeneficiaryDetails as $detail) {
+                    $transactionId = $detail->ld_id ?? $detail->id ?? '';
+                    $uniqueId = $detail->ben_id ?? '';
+                    $aadhaar = $detail->account_no ?? $detail->aadhaar_no ?? '';
+
+                    $sim = $this->getSimulatedTransactionStatus($idx, $total, $aadhaar);
+                    $statusCode = $detail->status_code ?? $detail->response_code ?? $sim['statusCode'];
+                    $remarks = $detail->remarks ?? $detail->reason ?? $sim['remarks'];
+
+                    // If remarks is empty, ends with trailing pipe: txId|benId|00|
+                    // If remarks is present: txId|benId|96|PART-...
+                    $finalData[] = "{$transactionId}|{$uniqueId}|{$statusCode}|{$remarks}\n";
+                    $idx++;
+                }
+            } else {
                 // Fallback to local BandhanTransactionDetail
                 $localDetails = BandhanTransactionDetail::where('lot_number', $lotNo)->get();
                 if ($localDetails->isNotEmpty()) {
-                    $finalData = [];
+                    $idx = 0;
+                    $total = $localDetails->count();
                     foreach ($localDetails as $detail) {
-                        $row = ($detail->transaction_id ?? $detail->id) . '|' . ($detail->beneficiary_id ?? '') . "|00|\n";
-                        $finalData[] = $row;
+                        $transactionId = $detail->transaction_id ?? $detail->id ?? '';
+                        $uniqueId = $detail->beneficiary_id ?? '';
+                        $aadhaar = $detail->account_number ?? '';
+
+                        $sim = $this->getSimulatedTransactionStatus($idx, $total, $aadhaar);
+                        $statusCode = $sim['statusCode'];
+                        $remarks = $sim['remarks'];
+
+                        $finalData[] = "{$transactionId}|{$uniqueId}|{$statusCode}|{$remarks}\n";
+                        $idx++;
                     }
                 } else {
-                    $errResponse = response()->json([
-                        'status' => 'error',
-                        'message' => 'No beneficiary details found for lot number: ' . $lotNo
-                    ], 404);
-                    $this->logActionResponse($actionId, $errResponse, $lotNo);
-                    return $errResponse;
-                }
-            } else {
-                $finalData = [];
-                foreach ($lotBeneficiaryDetails as $detail) {
-                    $transaction_id = $detail->ld_id;
-                    $uniqueId = $detail->ben_id;
-                    $row = $transaction_id . '|' . $uniqueId . "|00|\n";
-                    $finalData[] = $row;
+                    // Fallback to reading 3717 decrypted text from storage
+                    $lotSuffixClean = '_' . preg_replace('/[^A-Za-z0-9_-]/', '', (string)$lotNo);
+                    $searchFolders = ['bandhan/3717', 'bandhanbentransactionencdata', "bandhan/{$actionId}"];
+                    $foundFile = null;
+
+                    foreach ($searchFolders as $sFolder) {
+                        if (Storage::disk('local')->exists($sFolder)) {
+                            $files = Storage::disk('local')->files($sFolder);
+                            $matchingFiles = array_filter($files, fn($f) => str_contains($f, "decrypted{$lotSuffixClean}"));
+                            if (!empty($matchingFiles)) {
+                                $foundFile = end($matchingFiles);
+                                break;
+                            }
+                        }
+                    }
+
+                    if ($foundFile) {
+                        $fileData = Storage::disk('local')->get($foundFile);
+                        $lines = array_filter(preg_split('/\r\n|\r|\n/', trim($fileData)), fn($l) => trim($l) !== '');
+                        $idx = 0;
+                        $total = count($lines);
+                        foreach ($lines as $line) {
+                            $cols = explode('|', trim($line));
+                            $transactionId = $cols[0] ?? '';
+                            $uniqueId = $cols[1] ?? '';
+                            $aadhaar = $cols[4] ?? '';
+
+                            $sim = $this->getSimulatedTransactionStatus($idx, $total, $aadhaar);
+                            $statusCode = $sim['statusCode'];
+                            $remarks = $sim['remarks'];
+
+                            $finalData[] = "{$transactionId}|{$uniqueId}|{$statusCode}|{$remarks}\n";
+                            $idx++;
+                        }
+                    } else {
+                        $errResponse = response()->json([
+                            'status' => 'error',
+                            'message' => 'No beneficiary details found for lot number: ' . $lotNo
+                        ], 404);
+                        $this->logActionResponse($actionId, $errResponse, $lotNo);
+                        return $errResponse;
+                    }
                 }
             }
 
@@ -1123,16 +1352,43 @@ class BandhanTransactionService
             return $response;
         }
 
+        // CASE 2: Inbound Push Callback (Bank sends transaction response with encrypted payload)
+        $validLines = $parsed['storedFiles']['validLines'] ?? [];
+        $successCount = 0;
+        $failedCount = 0;
+
+        foreach ($validLines as $line) {
+            $cols = explode('|', trim($line));
+            $statusCode = $cols[2] ?? '00';
+
+            if ($statusCode === '00') {
+                $successCount++;
+            } else {
+                $failedCount++;
+            }
+        }
+
         $response = response()->json([
             'status'  => 'success',
-            'message' => "Action {$actionId} transaction response payload processed and saved to {$folder}/.",
+            'message' => "Action {$actionId} transaction response payload processed successfully.",
             'data'    => [
-                'action_id'  => $actionId,
-                'lot_number' => $lotNumber,
-                'folder'     => $folder,
+                'action_id'      => $actionId,
+                'lot_number'     => $lotNumber,
+                'folder'         => $folder,
+                'total_records'  => count($validLines),
+                'success_count'  => $successCount,
+                'failed_count'   => $failedCount,
+                'encrypted_file' => $parsed['storedFiles']['encryptedFileName'] ?? null,
+                'decrypted_file' => $parsed['storedFiles']['decryptedFileName'] ?? null,
             ]
         ], 200);
-        $this->logActionResponse($actionId, $response, $lotNumber);
+
+        $this->logActionResponse($actionId, $response, $lotNumber, [
+            'total_records' => count($validLines),
+            'success_count' => $successCount,
+            'failed_count'  => $failedCount,
+        ]);
+
         return $response;
     }
 
