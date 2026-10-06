@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use App\Http\Controllers\BandhanTransactionController;
+use Illuminate\Http\Request;
 
 Route::post('/cmosvc/user/generateotp', function () {
     return response()->json([
@@ -85,4 +87,23 @@ Route::post('/cmosvc/shared/wcdpushgrievatr/', function () {
 | Handles all ActionIds (1060, 1068, 1069, 1072, 1073, 1074) & callback payloads.
 |
 */
-Route::any('/Bone/LakshmiBhandar/1.0/1234', [BandhanTransactionController::class, 'handleBandhanCallback']);
+
+Route::any('/Bone/AnnapurnaLogin/1.0/1234', function (Request $request) {
+    $apiKey    = $request->header('api_key') ?? $request->header('api-key');
+    $secretKey = $request->header('secret_key') ?? $request->header('secret-key');
+    $userId    = $request->header('user_id') ?? $request->header('user-id');
+    if ($apiKey != "neugnxzjhgfc3mr4qj2muafg7" || $secretKey != "a1b2c33d4e5f6g7h8i9jakblc" || $userId != "user3") {
+        return response()->json([
+            'responseCode' => '02',
+            'responseMsg' => 'Please provide user Id',
+            'token' => "",
+        ], 400);
+    } else {
+        return response()->json([
+            'responseCode' => '00',
+            'responseMsg' => 'Success',
+            'token' => Str::random(30)
+        ], 200);
+    }
+});
+Route::any('/Bone/Annapurna/1.0/1234', [BandhanTransactionController::class, 'handleBandhanCallback']);
