@@ -257,7 +257,9 @@ class BandhanTransactionService
 
     /**
      * ACTION 3715 (Right column) / 1068: Lot Validation Info
-     * Queries database/storage for lot validation statistics (total, success, rejected).
+     * Queries database/storage for lot validation statistics.
+     * On 1st hit: returns randomly failed records with the rest as pending.
+     * On 2nd hit: returns fully successful lot (status Completed, successCount = totalRecord).
      */
     public function handleLotValidationInfo(array $parsed, array $rawData, ?string $rawContent = null)
     {
@@ -266,8 +268,6 @@ class BandhanTransactionService
         $recordCount = $parsed['recordCount'];
 
         $totalRecord = 0;
-        $successCount = 0;
-        $rejectedCount = 0;
 
         if (!empty($lotNumber)) {
             $numericLot = (int)preg_replace('/\D/', '', (string)$lotNumber);
@@ -276,11 +276,9 @@ class BandhanTransactionService
                 $master = DB::connection('pgsql_payment')->table('fldc_main.av_lot_master')
                     ->where('lot_no', $numericLot)
                     ->orWhere('lot_no', (string)$lotNumber)
-                    ->first(['success_count', 'failed_count', 'ben_count']);
+                    ->first(['ben_count', 'success_count', 'failed_count']);
                 if ($master && $master->ben_count) {
                     $totalRecord = (int)$master->ben_count;
-                    $successCount = (int)$master->success_count;
-                    $rejectedCount = (int)$master->failed_count;
                 }
             } catch (\Exception $e) {}
 
@@ -289,29 +287,16 @@ class BandhanTransactionService
                 $detailsCount = BandhanTransactionDetail::where('lot_number', $lotNumber)->count();
                 if ($detailsCount > 0) {
                     $totalRecord = $detailsCount;
-                    // Check if explicit responses were recorded
-                    $dbRej = BandhanTransactionDetail::where('lot_number', $lotNumber)
-                        ->where('column_3', 'N')
-                        ->count();
-                    if ($dbRej > 0) {
-                        $rejectedCount = $dbRej;
-                    } else {
-                        // Natural simulated mix (~3% rejected)
-                        $rejectedCount = (int)ceil($totalRecord * 0.03);
-                    }
-                    $successCount = max(0, $totalRecord - $rejectedCount);
                 } else {
                     $tx = BandhanTransaction::where('lot_number', $lotNumber)->latest()->first();
                     if ($tx && $tx->record_count) {
                         $totalRecord = (int)$tx->record_count;
-                        $rejectedCount = (int)ceil($totalRecord * 0.03);
-                        $successCount = max(0, $totalRecord - $rejectedCount);
                     }
                 }
             }
         }
 
-        // Fallback to storage files in folder if database does not contain the lot yet
+        // 3. Fallback to storage files in folder if database does not contain the lot yet
         if ($totalRecord === 0 && !empty($lotNumber)) {
             $lotSuffixClean = '_' . preg_replace('/[^A-Za-z0-9_-]/', '', (string)$lotNumber);
             $searchFolders = ["bandhan/{$actionId}", 'bandhan/3713', 'bandhanbentransactionencdata'];
@@ -325,21 +310,6 @@ class BandhanTransactionService
                         $fileData = Storage::disk('local')->get($latestFile);
                         $lines = array_filter(preg_split('/\r\n|\r|\n/', trim($fileData)), fn($l) => trim($l) !== '');
                         $totalRecord = count($lines);
-                        $rej = 0;
-                        foreach ($lines as $line) {
-                            $cols = explode('|', trim($line));
-                            $status = $cols[2] ?? 'Y';
-                            $statusCode = $cols[4] ?? '00';
-                            $nameStatus = $cols[5] ?? 'Y';
-                            $nameStatusCode = $cols[6] ?? '00';
-
-                            $res = $this->evaluateValidationResult($status, $nameStatus, $statusCode, $nameStatusCode);
-                            if ($res === 'N') {
-                                $rej++;
-                            }
-                        }
-                        $rejectedCount = $rej;
-                        $successCount = max(0, $totalRecord - $rejectedCount);
                         break;
                     }
                 }
@@ -348,22 +318,104 @@ class BandhanTransactionService
 
         if ($totalRecord === 0 && !empty($recordCount)) {
             $totalRecord = (int)$recordCount;
-            $successCount = $totalRecord;
-            $rejectedCount = 0;
         }
+
+        if ($totalRecord === 0) {
+            $totalRecord = 100; // Default simulated fallback lot size
+        }
+
+        // Track 1st hit vs 2nd hit state per lot number
+        $cleanLot = !empty($lotNumber) ? preg_replace('/[^A-Za-z0-9_-]/', '', (string)$lotNumber) : 'default_lot';
+        $stateFolder = $this->getActionFolder($actionId);
+        $statePath = "{$stateFolder}/lot_state_{$cleanLot}.json";
+
+        $isReset = !empty($rawData['reset']) || request()->boolean('reset');
+        $forcedHit = $rawData['hit'] ?? request()->input('hit', null);
+
+        $state = [];
+        if (!$isReset && Storage::disk('local')->exists($statePath)) {
+            try {
+                $state = json_decode(Storage::disk('local')->get($statePath), true) ?: [];
+            } catch (\Exception $e) {
+                $state = [];
+            }
+        }
+
+        $previousHits = (int)($state['hits'] ?? 0);
+        $hitNumber = $forcedHit !== null ? (int)$forcedHit : ($previousHits + 1);
+
+        // Check for manual overrides from request payload/query
+        $reqSuccess = $rawData['responseSuccess'] ?? $rawData['successCount'] ?? $rawData['success_count'] ?? null;
+        $reqFailed = $rawData['responseFailed'] ?? $rawData['rejectedCount'] ?? $rawData['failed_count'] ?? null;
+        $reqPending = $rawData['responsePending'] ?? $rawData['pendingCount'] ?? $rawData['pending_count'] ?? null;
+        $reqStatus = $rawData['status'] ?? null;
+
+        $hasManualOverrides = ($reqSuccess !== null || $reqFailed !== null || $reqPending !== null || $reqStatus !== null);
+
+        if ($hasManualOverrides) {
+            $status = $reqStatus ?? ($hitNumber >= 2 ? 'Completed' : 'Partial');
+            $successCount = $reqSuccess !== null ? (int)$reqSuccess : ($hitNumber >= 2 ? $totalRecord : 0);
+            $rejectedCount = $reqFailed !== null ? (int)$reqFailed : 0;
+            $pendingCount = $reqPending !== null ? (int)$reqPending : max(0, $totalRecord - $successCount - $rejectedCount);
+        } elseif ($hitNumber === 1) {
+            // ─────────────────────────────────────────────────────────────
+            // 1ST HIT: Partial status (randomly failed + rest are pending)
+            // ─────────────────────────────────────────────────────────────
+            $status = 'Partial';
+            $randomFailPct = rand(2, 5); // 2% - 5% failure rate
+            $rejectedCount = max(1, (int)round(($totalRecord * $randomFailPct) / 100));
+            if ($totalRecord > 1 && $rejectedCount >= $totalRecord) {
+                $rejectedCount = 1;
+            }
+            $successCount = 0;
+            $pendingCount = max(0, $totalRecord - $rejectedCount);
+        } else {
+            // ─────────────────────────────────────────────────────────────
+            // 2ND HIT: Completed status (failed records from 1st hit remain failed,
+            // all pending records become successful)
+            // ─────────────────────────────────────────────────────────────
+            $status = 'Completed';
+            $rejectedCount = isset($state['failed_count']) ? (int)$state['failed_count'] : max(1, (int)round(($totalRecord * 0.03)));
+            if ($rejectedCount >= $totalRecord && $totalRecord > 1) {
+                $rejectedCount = 1;
+            }
+            $successCount = max(0, $totalRecord - $rejectedCount);
+            $pendingCount = 0;
+        }
+
+        // Persist updated hit state
+        $stateData = [
+            'lot_number'    => $lotNumber,
+            'hits'          => $hitNumber,
+            'status'        => $status,
+            'total_record'  => $totalRecord,
+            'success_count' => $successCount,
+            'failed_count'  => $rejectedCount,
+            'pending_count' => $pendingCount,
+            'updated_at'    => date('Y-m-d H:i:s'),
+        ];
+        Storage::disk('local')->put($statePath, json_encode($stateData, JSON_PRETTY_PRINT));
 
         $recordsList = [
             ["Fn" => "lotNumber", "Fv" => (string)($lotNumber ?? ""), "Dt" => ""],
             ["Fn" => "totalRecord", "Fv" => (string)$totalRecord, "Dt" => ""],
             ["Fn" => "date", "Fv" => date('d-m-Y H:i:s'), "Dt" => ""],
-            ["Fn" => "status", "Fv" => "Completed", "Dt" => ""],
+            ["Fn" => "status", "Fv" => (string)$status, "Dt" => ""],
             ["Fn" => "successCount", "Fv" => (string)$successCount, "Dt" => ""],
-            ["Fn" => "rejectedCount", "Fv" => (string)$rejectedCount, "Dt" => ""]
+            ["Fn" => "rejectedCount", "Fv" => (string)$rejectedCount, "Dt" => ""],
+            ["Fn" => "pendingCount", "Fv" => (string)$pendingCount, "Dt" => ""]
         ];
 
         $responseData = $this->buildTupleResponse($parsed, $recordsList);
         $response = response()->json(json_encode($responseData), 200);
-        $this->logActionResponse($actionId, $response, $lotNumber, ['totalRecord' => $totalRecord, 'successCount' => $successCount]);
+        $this->logActionResponse($actionId, $response, $lotNumber, [
+            'hit_number'    => $hitNumber,
+            'status'        => $status,
+            'totalRecord'   => $totalRecord,
+            'successCount'  => $successCount,
+            'rejectedCount' => $rejectedCount,
+            'pendingCount'  => $pendingCount,
+        ]);
         return $response;
     }
 
